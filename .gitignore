@@ -1,0 +1,75 @@
+# Dependencies
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Build outputs
+.next/
+dist/
+build/
+out/
+*.egg-info/
+
+# Move build artifacts
+packages/move/build/
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+*.env
+!.env.example
+!.env.local.example
+
+# Logs
+*.log
+logs/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Local DB dumps
+*.sql.bak
+*.dump
+
+# Sui keystore / wallet secrets
+sui.keystore
+*.keystore
+sui_config/
+
+# Next.js / web app artifacts
+.turbo/
+.swc/
+next-env.d.ts
+apps/web/.next/
+apps/web/out/
+
+# Python tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# pnpm / npm
+.pnpm-store/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Repomix output (we run this often during dev)
+repomix-output.xml
+repomix-output_*.xml
+
+# OS junk
+ehthumbs.db
+Desktop.ini
+
+# Lockfiles only on root — apps/web/package-lock.json was from npm install
+apps/web/package-lock.json

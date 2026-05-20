@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: ankane/pgvector:v0.5.1
+    container_name: mnemo_postgres
+    environment:
+      POSTGRES_USER: mnemo_user
+      POSTGRES_PASSWORD: mnemo_password
+      POSTGRES_DB: mnemo_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - mnemo_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mnemo_user -d mnemo_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: mnemo_redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - mnemo_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  mnemo_pgdata:
+  mnemo_redisdata:

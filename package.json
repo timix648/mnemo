@@ -1,0 +1,13 @@
+{
+  "name": "mnemo",
+  "version": "0.1.0",
+  "description": "Your AI memory, owned and portable. Sui Overflow 2026.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:sidecar": "pnpm --filter @mnemo/sidecar dev",
+    "dev:web": "pnpm --filter @mnemo/web dev",
+    "build:web": "pnpm --filter @mnemo/web build",
+    "typecheck": "pnpm -r typecheck"
+  }
+}

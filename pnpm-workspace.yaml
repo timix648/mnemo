@@ -1,0 +1,12 @@
+packages:
+  - 'apps/web'
+  - 'apps/sidecar'
+  - 'packages/shared'
+  - 'scripts'
+allowBuilds:
+  esbuild: true
+  msw: true
+  sharp: true
+  unrs-resolver: true
+minimumReleaseAgeExclude:
+  - '@mysten/sui@2.17.0'

@@ -1,0 +1,21 @@
+{
+  "name": "@mnemo/scripts",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:memwal": "tsx test-memwal.ts",
+    "seed:user": "tsx seed-user.ts"
+  },
+  "dependencies": {
+    "@mnemo/shared": "workspace:*",
+    "dotenv": "^17.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.0",
+    "pg": "8.13.0",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.10.0",
+    "typescript": "^5.9.3"
+  }
+}

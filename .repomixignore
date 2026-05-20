@@ -1,0 +1,44 @@
+# Lock files — huge and not useful for code review
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+Cargo.lock
+
+# Build artifacts (also in .gitignore but repomix may pick them up)
+node_modules/
+.next/
+dist/
+build/
+out/
+.venv/
+__pycache__/
+
+# Move build outputs
+packages/move/build/
+
+# Sui keystore
+sui_config/
+*.keystore
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs and dumps
+*.log
+*.sql.bak
+*.dump
+
+# Repomix output itself
+repomix-output.xml
+repomix-output_*.xml
+
+# Frontend test/build clutter (still capture source)
+apps/web/public/
+apps/web/.next/
+apps/web/out/
+
+# Skip the noise but keep the substance:
+# we want to see actual code, not minified bundles or test fixtures
