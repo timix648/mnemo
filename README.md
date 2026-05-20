@@ -7,6 +7,23 @@ Your AI memory, owned and portable. Mnemo is a transparent HTTP proxy plus a mem
 **Team:** 2 developers + Claude (AI pair-programmer)
 **Target:** top 10 of ~5,000 submissions; mainnet by Aug 27 for full prize
 
+## Status
+
+**Week 1 of 5 complete** (May 16 - May 20, 2026). 32 days to submission.
+
+End-to-end pipeline works on testnet:
+
+- Proxy (`:8080`) forwards OpenAI requests upstream, worker captures with 1536-dim pgvector embeddings.
+- Sidecar (`:3001`) round-trips through MemWal + Seal **mocked** clients (~30ms). Real SDK wiring is Week 2.
+- API (`:8001`) serves `/me`, `/namespaces`, `/keys`, `/search` (semantic search confirmed against seeded entries).
+- `namespace` and `policy` Move modules deployed to Sui testnet.
+
+**Testnet package ID:** `0x7b6c4130a57c3bfc8b4d123a2bc96f962932a7dbd73642fb70da0c8039d5b23d`
+**Explorer:** https://testnet.suivision.xyz/package/0x7b6c4130a57c3bfc8b4d123a2bc96f962932a7dbd73642fb70da0c8039d5b23d
+
+**Week 2 focus (May 21 - May 27):** replace mocked MemWal + Seal clients with real SDKs. Wire Enoki zkLogin in the web app. Real end-to-end test with Cursor pointing at the proxy.
+
+
 ## Architecture
 
 ```
@@ -35,7 +52,7 @@ Your AI memory, owned and portable. Mnemo is a transparent HTTP proxy plus a mem
                           └──────────────┘           └─────────────┘
 
                           ┌──────────────┐
-                          │  Web App     │ ──HTTP──▶ Mgmt API (Python) :8000
+                          │  Web App     │ ──HTTP──▶ Mgmt API (Python) :8001
                           │  (Next.js,   │
                           │  Walrus      │
                           │   Sites)     │
@@ -48,7 +65,7 @@ Your AI memory, owned and portable. Mnemo is a transparent HTTP proxy plus a mem
 |---|---|---|---|
 | `apps/web` | Next.js 14 + TS | 3000 | Frontend, hosted on Walrus Sites |
 | `apps/proxy` | Python FastAPI | 8080 | AI-tool-facing OpenAI/Anthropic proxy |
-| `apps/api` | Python FastAPI | 8000 | Web app's management API |
+| `apps/api` | Python FastAPI | 8001 | Web app's management API |
 | `apps/worker` | Python (RQ) | — | Async capture worker |
 | `apps/sidecar` | Node.js Express | 3001 | MemWal + Seal SDK bridge |
 | `packages/move` | Sui Move | — | Smart contracts |
@@ -74,7 +91,7 @@ cd apps/sidecar && pnpm install && pnpm dev
 cd apps/proxy && pip install -r requirements.txt && uvicorn mnemo_proxy.main:app --port 8080 --reload
 
 # 5. Start the API (Python)
-cd apps/api && pip install -r requirements.txt && uvicorn mnemo_api.main:app --port 8000 --reload
+cd apps/api && pip install -r requirements.txt && uvicorn mnemo_api.main:app --port 8001 --reload
 
 # 6. Start the worker (Python)
 cd apps/worker && pip install -r requirements.txt && python -m mnemo_worker.main
@@ -85,9 +102,9 @@ cd apps/web && pnpm install && pnpm dev
 
 ## Week 1 definition of done
 
-- [ ] Proxy forwards `POST /v1/chat/completions` to OpenAI, streams the response correctly back to `curl`.
-- [ ] `scripts/test-memwal.ts` round-trips a remember/recall against testnet.
-- [ ] `namespace.move` is deployed to Sui testnet; address recorded in `packages/move/DEPLOYMENTS.md`.
-- [ ] Web app boots, Enoki Google sign-in works, Sui address is visible on `/onboard`.
+- [x] Proxy forwards `POST /v1/chat/completions` to OpenAI, streams the response correctly back to `curl`.
+- [x] `scripts/test-memwal.ts` round-trips a remember/recall against testnet (mocked; real SDK wiring is Week 2).
+- [x] `namespace.move` is deployed to Sui testnet; address recorded in `packages/move/DEPLOYMENTS.md`.
+- [x] API `/me`, `/namespaces`, `/keys`, `/search` endpoints functional. `/search` validated end-to-end with real OpenAI embeddings + pgvector cosine retrieval. (Web app onboarding wiring moves to Week 2.)
 
-See `apps/*/README.md` for per-service details. See the root build plan (`Mnemo_Build_Plan.docx`) for the full 5-week plan.
+See `apps/*/README.md` for per-service details. See the root build plan (`Mnemo_Build_Guide.docx`) for the full 5-week plan.

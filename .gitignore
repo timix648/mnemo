@@ -73,3 +73,5 @@ Desktop.ini
 
 # Lockfiles only on root — apps/web/package-lock.json was from npm install
 apps/web/package-lock.json
+# Local debug helpers
+apps/worker/test-db.py

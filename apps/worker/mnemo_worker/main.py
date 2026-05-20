@@ -30,8 +30,9 @@ log = logging.getLogger("mnemo.worker")
 QUEUE_KEY = "mnemo:captures"
 POP_TIMEOUT_SECONDS = 5
 
-_engine = create_async_engine(settings.database_url, echo=False, pool_pre_ping=True)
-_SessionMaker = async_sessionmaker(_engine, expire_on_commit=False, class_=AsyncSession)
+# Engine + session maker created lazily inside the event loop in _run().
+_engine = None
+_SessionMaker: async_sessionmaker | None = None
 _running = True
 
 
@@ -64,8 +65,7 @@ async def _process_one(job: dict[str, Any], http: httpx.AsyncClient) -> None:
     payload_json = json.dumps(payload).encode("utf-8")
     plaintext_b64 = base64.b64encode(payload_json).decode("ascii")
 
-    # WEEK 1 NOTE: we don't yet have a real policy object ID; pass the
-    # namespace UUID as a placeholder. Sidecar mocks ignore it.
+    # WEEK 1 NOTE: pass the namespace UUID as a placeholder policy ID; mocks ignore it.
     enc_resp = (await http.post(
         f"{settings.sidecar_url}/seal/encrypt",
         json={"policyObjectId": namespace_id, "plaintext": plaintext_b64},
@@ -114,8 +114,13 @@ async def _process_one(job: dict[str, Any], http: httpx.AsyncClient) -> None:
 
 
 async def _run():
+    global _engine, _SessionMaker
     signal.signal(signal.SIGINT, _handle_shutdown)
     signal.signal(signal.SIGTERM, _handle_shutdown)
+
+    # Create engine inside the event loop so asyncpg binds correctly
+    _engine = create_async_engine(settings.database_url, echo=False, pool_pre_ping=True)
+    _SessionMaker = async_sessionmaker(_engine, expire_on_commit=False, class_=AsyncSession)
 
     redis = aioredis.from_url(settings.redis_url, decode_responses=True)
     await redis.ping()
@@ -141,7 +146,8 @@ async def _run():
                 await asyncio.sleep(1.0)
 
     await redis.close()
-    await _engine.dispose()
+    if _engine is not None:
+        await _engine.dispose()
     log.info("worker stopped")
 
 
