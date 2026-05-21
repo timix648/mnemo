@@ -1,13 +1,12 @@
 [package]
 name = "mnemo"
-edition = "2024.beta"
+edition = "2024"
 version = "0.0.1"
 
 [dependencies]
-Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/testnet" }
 
 [addresses]
-mnemo = "0x0"
+memwal = "0x0"
 
 [dev-dependencies]
 
