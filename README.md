@@ -5,11 +5,11 @@ Your AI memory, owned and portable. Mnemo is a transparent HTTP proxy plus a mem
 **Hackathon:** Sui Overflow 2026 — Agentic Web Track
 **Build window:** May 16 → June 21, 2026
 **Team:** 2 developers + Claude (AI pair-programmer)
-**Target:** top 10 of ~5,000 submissions; mainnet by Aug 27 for full prize
+
 
 ## Status
 
-**Week 1 of 5 complete** (May 16 - May 20, 2026). 32 days to submission.
+**Week 1 of 5 complete**.
 
 End-to-end pipeline works on testnet:
 
