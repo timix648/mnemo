@@ -23,10 +23,8 @@ import { createHash, randomUUID } from "node:crypto";
 
 // ---- Constants from this session ----
 const RELAYER_URL = process.env.RELAYER_URL ?? "http://localhost:8000";
-const PACKAGE_ID =
-  "0x81f9f45e054e9732db40c78daca85fe3b6511b783d461a4557c055fd85bf9aa4";
-const ACCOUNT_ID =
-  "0x43ef7277216a63cc45950331506bebe043662c5066c32c4678c7538c988940fd";
+const PACKAGE_ID = "0x140618622e96fe604e8fd1e8a752e1fe44726cdb0622a18020a61955ce918a60";
+const ACCOUNT_ID = "0x9ffdf5d63098926afb07148034bdf0a5fdd7d9f7b11d9e66e1b7ea3f74c3f054";
 const CLOCK_ID = "0x6";
 const DELEGATE_ADDRESS =
   "0x66daeabfaf6932dc4ecca18185fc7f6355e83a73d202a848177ce6fbd69cab2b";

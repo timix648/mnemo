@@ -508,7 +508,9 @@ module memwal::account_tests {
         {
             let account = scenario.take_shared<MemWalAccount>();
             let owner_bytes = sui::bcs::to_bytes(&OWNER);
-            account::seal_approve(owner_bytes, &account, scenario.ctx());
+            let clock = clock::create_for_testing(scenario.ctx());
+            account::seal_approve(owner_bytes, &account, &clock, scenario.ctx());
+            clock::destroy_for_testing(clock);
             test_scenario::return_shared(account);
         };
 
@@ -529,7 +531,9 @@ module memwal::account_tests {
         {
             let account = scenario.take_shared<MemWalAccount>();
             let owner_bytes = sui::bcs::to_bytes(&OWNER);
-            account::seal_approve(owner_bytes, &account, scenario.ctx());
+            let clock = clock::create_for_testing(scenario.ctx());
+            account::seal_approve(owner_bytes, &account, &clock, scenario.ctx());
+            clock::destroy_for_testing(clock);
             test_scenario::return_shared(account);
         };
 
@@ -554,7 +558,9 @@ module memwal::account_tests {
                 prefixed_id.push_back(owner_bytes[i]);
                 i = i + 1;
             };
-            account::seal_approve(prefixed_id, &account, scenario.ctx());
+            let clock = clock::create_for_testing(scenario.ctx());
+            account::seal_approve(prefixed_id, &account, &clock, scenario.ctx());
+            clock::destroy_for_testing(clock);
             test_scenario::return_shared(account);
         };
 
@@ -589,7 +595,9 @@ module memwal::account_tests {
         {
             let account = scenario.take_shared<MemWalAccount>();
             let owner_key_id = sui::bcs::to_bytes(&OWNER);
-            account::seal_approve(owner_key_id, &account, scenario.ctx());
+            let clock = clock::create_for_testing(scenario.ctx());
+            account::seal_approve(owner_key_id, &account, &clock, scenario.ctx());
+            clock::destroy_for_testing(clock);
             test_scenario::return_shared(account);
         };
 
@@ -607,7 +615,9 @@ module memwal::account_tests {
         {
             let account = scenario.take_shared<MemWalAccount>();
             let owner_key_id = sui::bcs::to_bytes(&OWNER);
-            account::seal_approve(owner_key_id, &account, scenario.ctx());
+            let clock = clock::create_for_testing(scenario.ctx());
+            account::seal_approve(owner_key_id, &account, &clock, scenario.ctx());
+            clock::destroy_for_testing(clock);
             test_scenario::return_shared(account);
         };
 
@@ -693,7 +703,9 @@ module memwal::account_tests {
         {
             let account = scenario.take_shared<MemWalAccount>();
             let wrong_bytes = sui::bcs::to_bytes(&OTHER); // using OTHER's id
-            account::seal_approve(wrong_bytes, &account, scenario.ctx());
+            let clock = clock::create_for_testing(scenario.ctx());
+            account::seal_approve(wrong_bytes, &account, &clock, scenario.ctx());
+            clock::destroy_for_testing(clock);
             test_scenario::return_shared(account);
         };
 
@@ -721,7 +733,7 @@ module memwal::account_tests {
 
             // Check an address that is not DELEGATE_ADDR
             assert!(!account.is_delegate_address(@0x1111));
-            
+
             clock::destroy_for_testing(clock);
             test_scenario::return_shared(account);
         };
@@ -948,7 +960,9 @@ module memwal::account_tests {
         {
             let account = scenario.take_shared<MemWalAccount>();
             let owner_bytes = sui::bcs::to_bytes(&OWNER);
-            account::seal_approve(owner_bytes, &account, scenario.ctx());
+            let clock = clock::create_for_testing(scenario.ctx());
+            account::seal_approve(owner_bytes, &account, &clock, scenario.ctx());
+            clock::destroy_for_testing(clock);
             test_scenario::return_shared(account);
         };
 
@@ -1474,7 +1488,7 @@ module memwal::account_tests {
         scenario.end();
     }
 
-    // ---- Full seal_approve entry path, heir after timeout (epoch-driven) ----
+    // ---- Full seal_approve entry path, heir after timeout (Clock-driven) ----
 
     #[test]
     fun test_seal_approve_heir_after_timeout_entry() {
@@ -1495,15 +1509,16 @@ module memwal::account_tests {
             test_scenario::return_shared(account);
         };
 
-        // Advance epoch time well past last_active + dormancy.
-        test_scenario::later_epoch(&mut scenario, 60_000, OWNER);
-
-        // Heir calls the real seal_approve entry → must NOT abort.
+        // Heir calls the real seal_approve entry with a Clock set well past
+        // last_active(0) + dormancy(1_000) → must NOT abort.
         scenario.next_tx(HEIR);
         {
             let account = scenario.take_shared<MemWalAccount>();
             let owner_id = account::seal_key_id(OWNER);
-            account::seal_approve(owner_id, &account, scenario.ctx());
+            let mut clock = clock::create_for_testing(scenario.ctx());
+            clock::set_for_testing(&mut clock, 60_000);
+            account::seal_approve(owner_id, &account, &clock, scenario.ctx());
+            clock::destroy_for_testing(clock);
             test_scenario::return_shared(account);
         };
 
@@ -1526,12 +1541,14 @@ module memwal::account_tests {
             test_scenario::return_shared(account);
         };
 
-        // No epoch advance: now_ms (~0) is far before the 90-day window.
+        // Clock at t=0: far before the 90-day window → must abort (ENoAccess).
         scenario.next_tx(HEIR);
         {
             let account = scenario.take_shared<MemWalAccount>();
             let owner_id = account::seal_key_id(OWNER);
-            account::seal_approve(owner_id, &account, scenario.ctx());
+            let clock = clock::create_for_testing(scenario.ctx());
+            account::seal_approve(owner_id, &account, &clock, scenario.ctx());
+            clock::destroy_for_testing(clock);
             test_scenario::return_shared(account);
         };
 
@@ -1556,13 +1573,14 @@ module memwal::account_tests {
             test_scenario::return_shared(account);
         };
 
-        test_scenario::later_epoch(&mut scenario, 60_000, OWNER);
-
         scenario.next_tx(HEIR);
         {
             let account = scenario.take_shared<MemWalAccount>();
             let owner_id = account::seal_key_id(OWNER);
-            account::seal_approve(owner_id, &account, scenario.ctx());
+            let mut clock = clock::create_for_testing(scenario.ctx());
+            clock::set_for_testing(&mut clock, 60_000);
+            account::seal_approve(owner_id, &account, &clock, scenario.ctx());
+            clock::destroy_for_testing(clock);
             test_scenario::return_shared(account);
         };
 

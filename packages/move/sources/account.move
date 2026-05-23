@@ -756,22 +756,27 @@ module memwal::account {
     /// argument, precisely because the relayer's PTB supplies no Clock. Epoch
     /// granularity (~24h) is far finer than needed for a multi-day dormancy
     /// window and is consensus-driven, not caller-controlled.
-    entry fun seal_approve(
-        id: vector<u8>,
-        account: &MemWalAccount,
-        ctx: &TxContext,
-    ) {
-        // Version gating (HIGH-14)
-        assert_object_version(&account.id);
+entry fun seal_approve(
+    id: vector<u8>,
+    account: &MemWalAccount,
+    clock: &Clock,
+    ctx: &TxContext,
+) {
+    // Version gating (HIGH-14)
+    assert_object_version(&account.id);
 
-        // Account must be active
-        assert!(account.active, EAccountDeactivated);
+    // Account must be active
+    assert!(account.active, EAccountDeactivated);
 
-        let caller = ctx.sender();
-        let now_ms = ctx.epoch_timestamp_ms();
+    let caller = ctx.sender();
+    // MNEMO: real-time Clock for accurate dormancy checks.
+    // The relayer's seal_approve PTB passes 0x6 as the clock argument.
+    // Mysten's time-lock pattern uses `seal_approve(id, &Clock)`,
+    // so this is the blessed approach for time-gated decryption.
+    let now_ms = clock.timestamp_ms();
 
-        assert!(seal_access_allowed(account, &id, caller, now_ms), ENoAccess);
-    }
+    assert!(seal_access_allowed(account, &id, caller, now_ms), ENoAccess);
+}
 
     /// Compute the SEAL key ID for a given owner address.
     /// Used by clients to construct the correct key ID for encryption.
