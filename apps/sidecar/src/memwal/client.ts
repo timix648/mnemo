@@ -1,68 +1,163 @@
 /**
- * MemWal client. WEEK 1: MOCK IMPLEMENTATION — stores blobs in memory.
+ * MemWal client — REAL implementation (Week 2, Architecture 1).
  *
- * In Week 2 we replace the body of these functions with calls to
- * @mysten-incubation/memwal once we've installed and verified its API.
+ * Talks to the live MemWal relayer. The relayer owns the WHOLE pipeline:
+ * embed → Seal-encrypt → Walrus upload → on-chain index. We send PLAINTEXT
+ * text and the relayer handles everything; recall is semantic (query → the
+ * relayer vector-searches, fetches from Walrus, Seal-decrypts, returns text).
  *
- * Why this mock? Two reasons:
- *   1. Lets the rest of the stack come up before we tackle the SDK details.
- *   2. Forces us to define a stable interface (the function signatures here)
- *      so the Python worker can call us via HTTP without knowing whether
- *      the backend is real or mocked.
+ * This replaces the Week-1 mock that base64-stored ciphertext in memory.
+ * Encryption is no longer done here (the old seal/client.ts mock is deleted);
+ * the relayer's Seal integration owns it.
+ *
+ * Auth scheme (from the relayer's auth.rs, proven in test-relayer-roundtrip.ts):
+ *   signed message = `{timestamp}.{method}.{path}.{body_sha256}.{nonce}.{account_id}`
+ *   headers: x-public-key (32B raw ed25519 hex), x-signature (raw ed25519 hex),
+ *            x-timestamp (unix s), x-nonce (uuid v4), x-account-id
+ *   The relayer resolves the owner by looking up the delegate pubkey on-chain.
+ *
+ * Required env:
+ *   RELAYER_URL            default http://localhost:8000
+ *   MNEMO_ACCOUNT_ID       the shared MemWalAccount object id
+ *   SIDECAR_DELEGATE_SUI_KEY   bech32 suiprivkey1... for the registered delegate
  */
-import { randomBytes } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
+import { decodeSuiPrivateKey } from "@mysten/sui/cryptography";
 import { logger } from "../log.js";
 
-interface BlobKey {
-  ownerAddress: string;
-  namespaceObjectId: string;
-  walrusBlobId: string;
+const RELAYER_URL = process.env.RELAYER_URL ?? "http://localhost:8000";
+const ACCOUNT_ID = process.env.MNEMO_ACCOUNT_ID ?? "";
+const DELEGATE_SUI_KEY = process.env.SIDECAR_DELEGATE_SUI_KEY ?? "";
+
+if (!ACCOUNT_ID) {
+  logger.warn("MNEMO_ACCOUNT_ID is not set — relayer calls will fail until configured");
+}
+if (!DELEGATE_SUI_KEY) {
+  logger.warn("SIDECAR_DELEGATE_SUI_KEY is not set — relayer calls will fail until configured");
 }
 
-// In-memory store for the mock.
-const _store = new Map<string, string>();
-
-function _keyOf(k: BlobKey): string {
-  return `${k.ownerAddress}::${k.namespaceObjectId}::${k.walrusBlobId}`;
+function kpFromBech32(s: string): Ed25519Keypair {
+  const { schema, secretKey } = decodeSuiPrivateKey(s);
+  if (schema !== "ED25519") throw new Error(`expected ED25519 key, got ${schema}`);
+  return Ed25519Keypair.fromSecretKey(secretKey);
 }
 
+// Lazily build the keypair so the module can import even with empty env
+// (health checks etc.); throws clearly only when a call actually needs it.
+let _delegateKp: Ed25519Keypair | null = null;
+let _delegatePubHex: string | null = null;
+function delegate(): { kp: Ed25519Keypair; pubHex: string } {
+  if (!DELEGATE_SUI_KEY) throw new Error("SIDECAR_DELEGATE_SUI_KEY not configured");
+  if (!ACCOUNT_ID) throw new Error("MNEMO_ACCOUNT_ID not configured");
+  if (!_delegateKp) {
+    _delegateKp = kpFromBech32(DELEGATE_SUI_KEY);
+    _delegatePubHex = Buffer.from(_delegateKp.getPublicKey().toRawBytes()).toString("hex");
+  }
+  return { kp: _delegateKp, pubHex: _delegatePubHex! };
+}
+
+/**
+ * Signed request to the relayer. Mirrors test-relayer-roundtrip.ts exactly.
+ */
+async function signedFetch(method: string, path: string, body?: unknown): Promise<any> {
+  const { kp, pubHex } = delegate();
+  const bodyStr = body === undefined ? "" : JSON.stringify(body);
+  const bodySha = createHash("sha256").update(bodyStr).digest("hex");
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const nonce = randomUUID();
+
+  const message = `${timestamp}.${method}.${path}.${bodySha}.${nonce}.${ACCOUNT_ID}`;
+  const rawSig = await kp.sign(new TextEncoder().encode(message));
+  const sigHex = Buffer.from(rawSig).toString("hex");
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "x-public-key": pubHex,
+    "x-signature": sigHex,
+    "x-timestamp": timestamp,
+    "x-nonce": nonce,
+    "x-account-id": ACCOUNT_ID,
+  };
+
+  const res = await fetch(RELAYER_URL + path, {
+    method,
+    headers,
+    body: method === "GET" ? undefined : bodyStr,
+  });
+  const respText = await res.text();
+  if (!res.ok) {
+    throw new Error(`${method} ${path} → ${res.status}: ${respText}`);
+  }
+  return respText ? JSON.parse(respText) : {};
+}
+
+async function pollJob(jobId: string, timeoutMs = 90_000, intervalMs = 3_000): Promise<string> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const job = await signedFetch("GET", `/api/remember/${jobId}`);
+    const status = job.status as string;
+    if (status === "done") {
+      const blobId = job.blob_id ?? job.blobId ?? job.walrus_blob_id ?? "";
+      logger.info({ jobId, blobId }, "memwal.remember done");
+      return blobId;
+    }
+    if (status === "failed") {
+      throw new Error(`remember job ${jobId} failed: ${job.error_msg ?? "unknown"}`);
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  throw new Error(`remember job ${jobId} did not finish within ${timeoutMs}ms`);
+}
+
+/**
+ * Store a memory. Sends PLAINTEXT text to the relayer, which embeds,
+ * Seal-encrypts, uploads to Walrus, and indexes on-chain. Returns the blob id.
+ *
+ * NOTE (Architecture 1): the relayer owns embedding + indexing. The caller
+ * (worker) should NOT pre-embed or pre-encrypt; it passes the raw text.
+ */
 export async function rememberBlob(input: {
   ownerAddress: string;
   namespaceObjectId: string;
-  ciphertext: string;
-  metadata: Record<string, unknown>;
+  text: string;
+  metadata?: Record<string, unknown>;
 }): Promise<string> {
-  const walrusBlobId = "mock_" + randomBytes(16).toString("hex");
-  _store.set(_keyOf({
-    ownerAddress: input.ownerAddress,
-    namespaceObjectId: input.namespaceObjectId,
-    walrusBlobId,
-  }), input.ciphertext);
-  logger.info(
-    { walrusBlobId, ns: input.namespaceObjectId, bytes: input.ciphertext.length },
-    "memwal.remember (mock)",
-  );
-  return walrusBlobId;
-}
-
-export async function recallBlob(input: BlobKey): Promise<string> {
-  const ciphertext = _store.get(_keyOf(input));
-  if (!ciphertext) {
-    throw new Error(`blob not found: ${input.walrusBlobId}`);
+  const namespace = input.namespaceObjectId || "default";
+  const job = await signedFetch("POST", "/api/remember", {
+    text: input.text,
+    namespace,
+    metadata: input.metadata ?? {},
+  });
+  const jobId = job.job_id ?? job.jobId;
+  if (!jobId) {
+    // Some relayer responses may be synchronous; accept a direct blob id too.
+    const direct = job.blob_id ?? job.walrus_blob_id;
+    if (direct) return direct;
+    throw new Error(`unexpected /api/remember response: ${JSON.stringify(job)}`);
   }
-  logger.info({ walrusBlobId: input.walrusBlobId }, "memwal.recall (mock)");
-  return ciphertext;
+  logger.info({ jobId, ns: namespace, bytes: input.text.length }, "memwal.remember enqueued");
+  return await pollJob(jobId);
 }
 
-// ----- WEEK 2 TODO -----
-// Replace the bodies above with the real SDK:
-//
-//   import { MemWalClient } from "@mysten-incubation/memwal";
-//   const memwal = new MemWalClient({
-//     suiClient: new SuiClient({ url: process.env.SUI_RPC_URL }),
-//     delegateKey: process.env.SIDECAR_DELEGATE_SUI_KEY,
-//     network: process.env.SUI_NETWORK,
-//   });
-//
-// Verify the API surface against the MemWal repo before wiring; the function
-// names may be `.remember()`/`.recall()` or `.store()`/`.retrieve()`.
+/**
+ * Semantic recall. Sends a query; the relayer vector-searches its index,
+ * fetches matching blobs from Walrus, Seal-decrypts, and returns the
+ * decrypted memories. Returns the raw relayer results array.
+ */
+export async function recallMemories(input: {
+  ownerAddress: string;
+  namespaceObjectId: string;
+  query: string;
+  topK?: number;
+}): Promise<Array<{ blob_id: string; text: string; distance?: number }>> {
+  const namespace = input.namespaceObjectId || "default";
+  const resp = await signedFetch("POST", "/api/recall", {
+    query: input.query,
+    namespace,
+    limit: input.topK ?? 10,
+  });
+  const results = resp.results ?? [];
+  logger.info({ ns: namespace, count: results.length }, "memwal.recall");
+  return results;
+}
