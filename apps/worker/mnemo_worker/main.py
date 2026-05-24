@@ -1,12 +1,16 @@
 """
-Mnemo capture worker.
+Mnemo capture worker (Architecture 1).
 
-Pulls capture jobs off the Redis queue, embeds the conversation, asks the
-sidecar to encrypt + write to Walrus via MemWal, and inserts a row in
-Postgres with the embedding for later semantic search.
+Pulls capture jobs off the Redis queue and forwards the conversation TEXT to
+the sidecar -> live MemWal relayer, which owns the heavy pipeline: embed ->
+Seal-encrypt -> Walrus upload -> on-chain semantic index.
+
+The worker no longer embeds or encrypts. It keeps a LIGHTWEIGHT row in the
+`entries` table (no embedding vector) purely as a metadata index so the UI can
+list conversations and map blob_id -> model/preview/tokens/ts. Semantic search
+and recall go through the relayer, not this table.
 """
 import asyncio
-import base64
 import json
 import logging
 import signal
@@ -18,19 +22,17 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
 from mnemo_worker.config import settings
-from mnemo_worker.embed import embed_text
 from mnemo_worker.payload import build_payload, preview_of
 
 logging.basicConfig(
     level=settings.log_level,
-    format="%(asctime)s %(levelname)s %(name)s — %(message)s",
+    format="%(asctime)s %(levelname)s %(name)s - %(message)s",
 )
 log = logging.getLogger("mnemo.worker")
 
 QUEUE_KEY = "mnemo:captures"
 POP_TIMEOUT_SECONDS = 5
 
-# Engine + session maker created lazily inside the event loop in _run().
 _engine = None
 _SessionMaker: async_sessionmaker | None = None
 _running = True
@@ -42,9 +44,32 @@ def _handle_shutdown(*_):
     _running = False
 
 
+def _conversation_text(payload: dict[str, Any]) -> str:
+    """Flatten the conversation into the text the relayer will embed + store.
+
+    This is what the user searches against, so we send the natural-language
+    prompt + response, not the JSON envelope. Structured metadata is kept in
+    the entries row instead.
+    """
+    lines: list[str] = []
+    for m in payload.get("prompt_messages", []):
+        content = m.get("content", "")
+        if isinstance(content, str) and content.strip():
+            role = m.get("role", "user")
+            lines.append(f"{role}: {content}")
+    resp = payload.get("response_text", "")
+    if isinstance(resp, str) and resp.strip():
+        lines.append(f"assistant: {resp}")
+    return "\n".join(lines).strip() or "(empty conversation)"
+
+
 async def _process_one(job: dict[str, Any], http: httpx.AsyncClient) -> None:
     user_id = job["user_id"]
-    namespace_id = job["namespace_id"]
+    namespace_id = job["namespace_id"]          # Postgres UUID (entries FK)
+    # Relayer groups memories by an opaque string. The proxy/API supplies it as
+    # `namespace_label` (e.g. the namespace name or its sui_object_id). Fall back
+    # to "default" — the grouping key we proved in the round-trip tests.
+    namespace_label = job.get("namespace_label") or "default"
     sui_address = job["sui_address"]
     provider = job["provider"]
     request_body = job["request_body"]
@@ -52,47 +77,35 @@ async def _process_one(job: dict[str, Any], http: httpx.AsyncClient) -> None:
 
     payload = build_payload(provider=provider, request_body=request_body, response_body=response_body)
     preview = preview_of(payload)
+    convo_text = _conversation_text(payload)
 
-    # Embed (prompt + response concatenated)
-    text_for_embedding = (
-        "\n".join(m.get("content", "") for m in payload["prompt_messages"] if isinstance(m.get("content"), str))
-        + "\n\n"
-        + payload["response_text"]
-    )
-    embedding = await embed_text(text_for_embedding)
-
-    # Sidecar: encrypt -> remember
-    payload_json = json.dumps(payload).encode("utf-8")
-    plaintext_b64 = base64.b64encode(payload_json).decode("ascii")
-
-    # WEEK 1 NOTE: pass the namespace UUID as a placeholder policy ID; mocks ignore it.
-    enc_resp = (await http.post(
-        f"{settings.sidecar_url}/seal/encrypt",
-        json={"policyObjectId": namespace_id, "plaintext": plaintext_b64},
-        timeout=20.0,
-    )).json()
-    ciphertext_b64 = enc_resp["ciphertext"]
-
+    # Architecture 1: send TEXT to the relayer (via sidecar). The relayer
+    # embeds, Seal-encrypts, uploads to Walrus, and indexes on-chain.
     rem_resp = (await http.post(
         f"{settings.sidecar_url}/memwal/remember",
         json={
             "ownerAddress": sui_address,
-            "namespaceObjectId": namespace_id,
-            "ciphertext": ciphertext_b64,
-            "metadata": {"ts": payload["ts"], "model": payload["model"]},
+            "namespaceObjectId": namespace_label,
+            "text": convo_text,
+            "metadata": {
+                "ts": payload["ts"],
+                "model": payload["model"],
+                "provider": payload["provider"],
+            },
         },
-        timeout=30.0,
+        timeout=120.0,  # relayer remember can take ~30-90s (embed+seal+walrus+chain)
     )).json()
     blob_id = rem_resp["walrusBlobId"]
 
+    # Lightweight metadata row for the UI (NO embedding — relayer owns search).
     async with _SessionMaker() as s:
         await s.execute(
             text(
                 """
                 INSERT INTO entries
-                       (user_id, namespace_id, walrus_blob_id, embedding,
+                       (user_id, namespace_id, walrus_blob_id,
                         model, preview, token_input, token_output, ts)
-                VALUES (:uid, :ns, :bid, CAST(:emb AS vector),
+                VALUES (:uid, :ns, :bid,
                         :model, :prev, :tin, :tout, NOW())
                 """
             ),
@@ -100,7 +113,6 @@ async def _process_one(job: dict[str, Any], http: httpx.AsyncClient) -> None:
                 "uid": user_id,
                 "ns": namespace_id,
                 "bid": blob_id,
-                "emb": str(embedding),
                 "model": payload["model"],
                 "prev": preview,
                 "tin": payload["token_counts"]["input"],
@@ -118,13 +130,12 @@ async def _run():
     signal.signal(signal.SIGINT, _handle_shutdown)
     signal.signal(signal.SIGTERM, _handle_shutdown)
 
-    # Create engine inside the event loop so asyncpg binds correctly
     _engine = create_async_engine(settings.database_url, echo=False, pool_pre_ping=True)
     _SessionMaker = async_sessionmaker(_engine, expire_on_commit=False, class_=AsyncSession)
 
     redis = aioredis.from_url(settings.redis_url, decode_responses=True)
     await redis.ping()
-    log.info("worker started — polling %s", QUEUE_KEY)
+    log.info("worker started - polling %s", QUEUE_KEY)
 
     async with httpx.AsyncClient() as http:
         while _running:
@@ -137,8 +148,8 @@ async def _run():
                 try:
                     await _process_one(job, http)
                 except Exception:
-                    log.exception("failed to process capture job; dropping (Week 1)")
-                    # Week 3 TODO: route to a dead-letter list mnemo:captures:dlq
+                    log.exception("failed to process capture job; dropping")
+                    # TODO: route to dead-letter list mnemo:captures:dlq
             except asyncio.CancelledError:
                 break
             except Exception:
