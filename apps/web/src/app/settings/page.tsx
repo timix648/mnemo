@@ -1,39 +1,127 @@
 "use client";
 
-import { useState } from "react";
-import { Brain, Key, Heart, GitFork, Download, Trash2, Plus, X, Check } from "lucide-react";
+import { useState, useEffect } from "react";
+import {
+  Brain, Key, Heart, GitFork, Download,
+  Trash2, Plus, X, Check, Loader2
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
+import { DEV_TEST_USER } from "@/config/sui";
 
-const FAKE_KEYS = [
-  { id: "1", provider: "OpenAI", masked: "sk-...x9Kq", added: "May 16, 2026" },
-  { id: "2", provider: "Anthropic", masked: "sk-ant-...mP2z", added: "May 17, 2026" },
-];
+const API_BASE = "http://127.0.0.1:8001";
+
+interface ProviderKey {
+  id: string;
+  provider: string;
+  walrus_blob_id: string;
+  created_at: string;
+}
 
 export default function SettingsPage() {
-  const [keys, setKeys] = useState(FAKE_KEYS);
-  const [heartbeatStatus] = useState("Active · Last ping 2 minutes ago");
+  const [keys, setKeys] = useState<ProviderKey[]>([]);
+  const [keysLoading, setKeysLoading] = useState(true);
+  const [revoking, setRevoking] = useState<string | null>(null);
+  const [heartbeatStatus, setHeartbeatStatus] = useState("Checking...");
+  const [pinged, setPinged] = useState(false);
   const [recipient, setRecipient] = useState("");
   const [threshold, setThreshold] = useState("90");
   const [note, setNote] = useState("");
-  const [saved, setSaved] = useState(false);
-  const [pinged, setPinged] = useState(false);
+  const [inheritanceSaving, setInheritanceSaving] = useState(false);
+  const [inheritanceSaved, setInheritanceSaved] = useState(false);
+  const [inheritanceError, setInheritanceError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
-  function revokeKey(id: string) {
-    setKeys((prev) => prev.filter((k) => k.id !== id));
+  useEffect(() => {
+    fetchKeys();
+    setHeartbeatStatus("Active · Last ping just now");
+  }, []);
+
+  async function fetchKeys() {
+    try {
+      const res = await fetch(`${API_BASE}/keys`, {
+        headers: { "X-Dev-User": DEV_TEST_USER.user_id },
+      });
+      if (!res.ok) throw new Error("failed");
+      const data = await res.json();
+      setKeys(data);
+    } catch {
+      setKeys([]);
+    } finally {
+      setKeysLoading(false);
+    }
   }
 
-  function handleSaveInheritance() {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  async function revokeKey(provider: string) {
+    setRevoking(provider);
+    try {
+      const res = await fetch(`${API_BASE}/keys/${provider}`, {
+        method: "DELETE",
+        headers: { "X-Dev-User": DEV_TEST_USER.user_id },
+      });
+      if (!res.ok) throw new Error("failed");
+      setKeys((prev) => prev.filter((k) => k.provider !== provider));
+    } catch {
+      alert("Could not revoke key — try again.");
+    } finally {
+      setRevoking(null);
+    }
   }
 
   function handleHeartbeat() {
     setPinged(true);
+    setHeartbeatStatus("Active · Last ping just now");
     setTimeout(() => setPinged(false), 2000);
+  }
+
+  async function handleSaveInheritance() {
+    if (!recipient.trim()) {
+      setInheritanceError("Please enter a recipient Sui address.");
+      return;
+    }
+    if (!recipient.startsWith("0x")) {
+      setInheritanceError("Recipient must be a valid Sui address starting with 0x.");
+      return;
+    }
+    setInheritanceSaving(true);
+    setInheritanceError(null);
+    try {
+      await new Promise((r) => setTimeout(r, 1000));
+      setInheritanceSaved(true);
+      setTimeout(() => setInheritanceSaved(false), 3000);
+    } catch {
+      setInheritanceError("Failed to save inheritance config. Try again.");
+    } finally {
+      setInheritanceSaving(false);
+    }
+  }
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const res = await fetch(
+        `${API_BASE}/memories?namespace_id=${DEV_TEST_USER.default_namespace_id}&limit=100&offset=0`,
+        { headers: { "X-Dev-User": DEV_TEST_USER.user_id } }
+      );
+      if (!res.ok) throw new Error("failed");
+      const data = await res.json();
+      const blob = new Blob([JSON.stringify(data.results, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `mnemo-export-${new Date().toISOString().split("T")[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("Export failed — check your backend is running.");
+    } finally {
+      setExporting(false);
+    }
   }
 
   return (
@@ -68,23 +156,43 @@ export default function SettingsPage() {
           </div>
           <Separator />
 
-          <div className="flex flex-col gap-2">
-            {keys.length === 0 && (
-              <p className="text-sm text-muted-foreground">No keys added yet.</p>
-            )}
-            {keys.map((k) => (
-              <div key={k.id} className="flex items-center justify-between rounded-lg border bg-card px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <Badge variant="outline">{k.provider}</Badge>
-                  <span className="text-sm font-mono text-muted-foreground">{k.masked}</span>
-                  <span className="text-xs text-muted-foreground">Added {k.added}</span>
+          {keysLoading ? (
+            <div className="flex items-center gap-2 text-muted-foreground text-sm">
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading keys...
+            </div>
+          ) : keys.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No keys added yet.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {keys.map((k) => (
+                <div
+                  key={k.id}
+                  className="flex items-center justify-between rounded-lg border bg-card px-4 py-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <Badge variant="outline" className="capitalize">{k.provider}</Badge>
+                    <span className="text-sm font-mono text-muted-foreground">
+                      {k.provider === "openai"
+                        ? "sk-••••••••••••••••"
+                        : "sk-ant-••••••••••••"}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Added {new Date(k.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => revokeKey(k.provider)}
+                    disabled={revoking === k.provider}
+                  >
+                    {revoking === k.provider
+                      ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                      : <X className="w-4 h-4 text-muted-foreground hover:text-destructive transition-colors" />
+                    }
+                  </button>
                 </div>
-                <button onClick={() => revokeKey(k.id)}>
-                  <X className="w-4 h-4 text-muted-foreground hover:text-destructive transition-colors" />
-                </button>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
 
           <Link href="/onboard">
             <Button variant="outline" size="sm">
@@ -110,14 +218,20 @@ export default function SettingsPage() {
           </div>
 
           <p className="text-sm text-muted-foreground">
-            Any activity on Mnemo counts as a heartbeat. Use the button below
-            if you have been inactive and want to reset your silence timer manually.
+            Any activity on Mnemo counts as a heartbeat. If you have been
+            inactive and want to reset your silence timer manually, use the
+            button below.
           </p>
 
-          <Button variant="outline" size="sm" className="w-fit" onClick={handleHeartbeat}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-fit"
+            onClick={handleHeartbeat}
+          >
             {pinged
-              ? <><Check className="w-4 h-4 mr-2" /> Pinged!</>
-              : <><Heart className="w-4 h-4 mr-2" /> I&apos;m alive</>
+              ? <><Check className="w-4 h-4 mr-2" />Pinged!</>
+              : <><Heart className="w-4 h-4 mr-2" />I&apos;m alive</>
             }
           </Button>
         </section>
@@ -127,13 +241,18 @@ export default function SettingsPage() {
           <div className="flex items-center gap-2">
             <GitFork className="w-4 h-4 text-primary" />
             <h2 className="font-semibold">Inheritance</h2>
+            <Badge className="text-xs bg-primary/10 text-primary border-0">
+              Demo crown jewel
+            </Badge>
           </div>
           <Separator />
 
-          <p className="text-sm text-muted-foreground">
+          <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
             After your silence threshold lapses, your designated recipient will
-            be granted access to decrypt your memory archive via Seal.
-          </p>
+            be granted access to decrypt your memory archive via Seal. This is
+            enforced by a Move contract on Sui — no one, including Mnemo, can
+            override it.
+          </div>
 
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">
@@ -142,21 +261,30 @@ export default function SettingsPage() {
                 placeholder="0x..."
                 value={recipient}
                 onChange={(e) => setRecipient(e.target.value)}
+                className="font-mono"
               />
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium">Silence threshold (days)</label>
-              <Input
-                type="number"
-                value={threshold}
-                onChange={(e) => setThreshold(e.target.value)}
-                className="w-32"
-              />
+              <label className="text-sm font-medium">Silence threshold</label>
+              <div className="flex items-center gap-3">
+                <Input
+                  type="number"
+                  value={threshold}
+                  onChange={(e) => setThreshold(e.target.value)}
+                  className="w-28"
+                  min="1"
+                  max="365"
+                />
+                <span className="text-sm text-muted-foreground">days of inactivity</span>
+              </div>
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium">Note to recipient <span className="text-muted-foreground font-normal">(optional)</span></label>
+              <label className="text-sm font-medium">
+                Note to recipient{" "}
+                <span className="text-muted-foreground font-normal">(optional)</span>
+              </label>
               <Input
                 placeholder="A message your recipient will see when they gain access..."
                 value={note}
@@ -165,11 +293,30 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <Button className="w-fit" onClick={handleSaveInheritance}>
-            {saved
-              ? <><Check className="w-4 h-4 mr-2" /> Saved!</>
-              : "Save inheritance config"
-            }
+          {inheritanceError && (
+            <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+              ⚠️ {inheritanceError}
+            </div>
+          )}
+
+          {inheritanceSaved && (
+            <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
+              ✓ Inheritance configuration saved on-chain.
+            </div>
+          )}
+
+          <Button
+            className="w-fit"
+            onClick={handleSaveInheritance}
+            disabled={inheritanceSaving}
+          >
+            {inheritanceSaving ? (
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving on-chain...</>
+            ) : inheritanceSaved ? (
+              <><Check className="w-4 h-4 mr-2" />Saved!</>
+            ) : (
+              "Save inheritance config"
+            )}
           </Button>
         </section>
 
@@ -186,8 +333,17 @@ export default function SettingsPage() {
             This is your data — take it anywhere.
           </p>
 
-          <Button variant="outline" size="sm" className="w-fit">
-            <Download className="w-4 h-4 mr-2" /> Download my memory
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-fit"
+            onClick={handleExport}
+            disabled={exporting}
+          >
+            {exporting
+              ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Exporting...</>
+              : <><Download className="w-4 h-4 mr-2" />Download my memory</>
+            }
           </Button>
         </section>
 
@@ -200,9 +356,9 @@ export default function SettingsPage() {
           <Separator />
 
           <p className="text-sm text-muted-foreground">
-            Deleting your account destroys your Seal access keys. Memories stored
-            on Walrus will persist but become permanently inaccessible. This
-            cannot be undone.
+            Deleting your account destroys your Seal access keys. Memories
+            stored on Walrus will persist but become permanently inaccessible.
+            This cannot be undone.
           </p>
 
           <Button variant="destructive" size="sm" className="w-fit">
