@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from mnemo_proxy.auth import authenticate
 from mnemo_proxy.config import settings
 from mnemo_proxy.queue import enqueue_capture
+from mnemo_proxy.source_app import classify_source_app
 from mnemo_proxy.upstream_keys import get_upstream_key
 
 router = APIRouter(prefix="/u/{user_id}/v1", tags=["openai"])
@@ -21,6 +22,7 @@ async def chat_completions(
     user_id: str,
     request: Request,
     authorization: Optional[str] = Header(None),
+    user_agent: Optional[str] = Header(None),
 ):
     user = await authenticate(user_id, authorization)
     if not user:
@@ -35,6 +37,8 @@ async def chat_completions(
         body = json.loads(raw_body)
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="invalid json body")
+
+    source_app, source_app_raw = classify_source_app(user_agent)
 
     upstream_url = f"{settings.openai_base_url}/v1/chat/completions"
     headers = {
@@ -54,7 +58,7 @@ async def chat_completions(
         upstream_body["stream_options"] = existing_opts
         upstream_raw = json.dumps(upstream_body).encode()
         return StreamingResponse(
-            _stream(upstream_url, upstream_raw, headers, user, body),
+            _stream(upstream_url, upstream_raw, headers, user, body, source_app, source_app_raw),
             media_type="text/event-stream",
         )
 
@@ -72,6 +76,8 @@ async def chat_completions(
                 "namespace_label": user.default_namespace_label or "default",
                 "sui_address": user.sui_address,
                 "provider": "openai",
+                "source_app": source_app,
+                "source_app_raw": source_app_raw,
                 "request_body": body,
                 "response_body": resp_json,
             })
@@ -79,7 +85,7 @@ async def chat_completions(
         return JSONResponse(content=resp_json, status_code=resp.status_code)
 
 
-async def _stream(upstream_url, raw_body, headers, user, request_body):
+async def _stream(upstream_url, raw_body, headers, user, request_body, source_app, source_app_raw):
     """Forward an SSE-streamed OpenAI response, accumulating for capture.
 
     Captures the final ``usage`` block emitted when ``stream_options.include_usage``
@@ -140,6 +146,8 @@ async def _stream(upstream_url, raw_body, headers, user, request_body):
                 "namespace_label": user.default_namespace_label or "default",
                 "sui_address": user.sui_address,
                 "provider": "openai",
+                "source_app": source_app,
+                "source_app_raw": source_app_raw,
                 "request_body": request_body,
                 "response_body": reconstructed,
             })

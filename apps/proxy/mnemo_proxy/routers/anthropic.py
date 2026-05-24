@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from mnemo_proxy.auth import authenticate
 from mnemo_proxy.config import settings
 from mnemo_proxy.queue import enqueue_capture
+from mnemo_proxy.source_app import classify_source_app
 from mnemo_proxy.upstream_keys import get_upstream_key
 
 router = APIRouter(prefix="/u/{user_id}/anthropic/v1", tags=["anthropic"])
@@ -27,6 +28,7 @@ async def messages(
     user_id: str,
     request: Request,
     authorization: Optional[str] = Header(None),
+    user_agent: Optional[str] = Header(None),
 ):
     user = await authenticate(user_id, authorization)
     if not user:
@@ -42,6 +44,8 @@ async def messages(
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="invalid json body")
 
+    source_app, source_app_raw = classify_source_app(user_agent)
+
     upstream_url = f"{settings.anthropic_base_url}/v1/messages"
     headers = {
         "x-api-key": upstream_key,
@@ -52,7 +56,7 @@ async def messages(
     streaming = bool(body.get("stream", False))
     if streaming:
         return StreamingResponse(
-            _stream(upstream_url, raw_body, headers, user, body),
+            _stream(upstream_url, raw_body, headers, user, body, source_app, source_app_raw),
             media_type="text/event-stream",
         )
 
@@ -67,8 +71,11 @@ async def messages(
             await enqueue_capture({
                 "user_id": str(user.id),
                 "namespace_id": str(user.default_namespace_id),
+                "namespace_label": user.default_namespace_label or "default",
                 "sui_address": user.sui_address,
                 "provider": "anthropic",
+                "source_app": source_app,
+                "source_app_raw": source_app_raw,
                 "request_body": body,
                 "response_body": resp_json,
             })
@@ -76,7 +83,7 @@ async def messages(
         return JSONResponse(content=resp_json, status_code=resp.status_code)
 
 
-async def _stream(upstream_url, raw_body, headers, user, request_body):
+async def _stream(upstream_url, raw_body, headers, user, request_body, source_app, source_app_raw):
     """Anthropic streams as `event: <name>\ndata: <json>\n\n` pairs."""
     text_parts: list[str] = []
     model: Optional[str] = None
@@ -118,8 +125,11 @@ async def _stream(upstream_url, raw_body, headers, user, request_body):
             await enqueue_capture({
                 "user_id": str(user.id),
                 "namespace_id": str(user.default_namespace_id),
+                "namespace_label": user.default_namespace_label or "default",
                 "sui_address": user.sui_address,
                 "provider": "anthropic",
+                "source_app": source_app,
+                "source_app_raw": source_app_raw,
                 "request_body": request_body,
                 "response_body": reconstructed,
             })

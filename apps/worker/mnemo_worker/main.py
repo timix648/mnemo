@@ -132,6 +132,11 @@ async def _process_one(job: dict[str, Any], http: httpx.AsyncClient) -> None:
     except (KeyError, TypeError) as e:
         raise PermanentJobError(f"malformed job, missing field: {e}")
 
+    # Optional source-app classification from the proxy. Missing on old jobs
+    # and on jobs from pre-source_app proxy versions — both fine, stored NULL.
+    source_app = job.get("source_app")
+    source_app_raw = job.get("source_app_raw")
+
     payload = build_payload(provider=provider, request_body=request_body, response_body=response_body)
     preview = preview_of(payload)
     convo_text = _conversation_text(payload)
@@ -156,9 +161,11 @@ async def _process_one(job: dict[str, Any], http: httpx.AsyncClient) -> None:
                 """
                 INSERT INTO entries
                        (user_id, namespace_id, walrus_blob_id,
-                        model, preview, token_input, token_output, ts)
+                        model, preview, token_input, token_output,
+                        source_app, source_app_raw, ts)
                 VALUES (:uid, :ns, :bid,
-                        :model, :prev, :tin, :tout, NOW())
+                        :model, :prev, :tin, :tout,
+                        :sapp, :sapp_raw, NOW())
                 """
             ),
             {
@@ -169,12 +176,14 @@ async def _process_one(job: dict[str, Any], http: httpx.AsyncClient) -> None:
                 "prev": preview,
                 "tin": payload["token_counts"]["input"],
                 "tout": payload["token_counts"]["output"],
+                "sapp": source_app,
+                "sapp_raw": source_app_raw,
             },
         )
         await s.commit()
 
-    log.info("captured entry: blob=%s ns=%s model=%s preview=%r",
-             blob_id, namespace_id, payload["model"], preview[:80])
+    log.info("captured entry: blob=%s ns=%s model=%s source=%s preview=%r",
+             blob_id, namespace_id, payload["model"], source_app, preview[:80])
 
 
 async def _run():

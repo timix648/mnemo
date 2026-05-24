@@ -3,7 +3,7 @@
 Search no longer runs a local pgvector query — the live MemWal relayer owns the
 vector index and decryption. We call the relayer's recall (via the sidecar),
 then enrich each hit with the lightweight metadata row in `entries`
-(model / preview / token counts / ts) for display.
+(model / preview / token counts / source_app / ts) for display.
 """
 from uuid import UUID
 
@@ -74,7 +74,7 @@ async def search(body: SearchRequest, user: CurrentUser = Depends(require_user))
                 text(
                     """
                     SELECT id, walrus_blob_id, model, preview,
-                           token_input, token_output, ts
+                           token_input, token_output, source_app, source_app_raw, ts
                       FROM entries
                      WHERE user_id = :uid
                        AND namespace_id = :ns
@@ -91,6 +91,8 @@ async def search(body: SearchRequest, user: CurrentUser = Depends(require_user))
                 "preview": row.preview,
                 "token_input": row.token_input,
                 "token_output": row.token_output,
+                "source_app": row.source_app,
+                "source_app_raw": row.source_app_raw,
                 "ts": row.ts.isoformat() if row.ts else None,
             }
 
@@ -112,6 +114,8 @@ async def search(body: SearchRequest, user: CurrentUser = Depends(require_user))
             "preview": meta.get("preview"),
             "token_input": meta.get("token_input"),
             "token_output": meta.get("token_output"),
+            "source_app": meta.get("source_app"),
+            "source_app_raw": meta.get("source_app_raw"),
             "ts": meta.get("ts"),
             "score": score,
         })

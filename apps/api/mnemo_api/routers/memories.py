@@ -26,6 +26,10 @@ async def list_memories(
         default=None,
         description="Filter to one namespace. Omit to list across all the user's namespaces.",
     ),
+    source_app: Optional[str] = Query(
+        default=None,
+        description="Filter by source-app label (e.g. 'cursor', 'bolt_ai'). Case-sensitive.",
+    ),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ):
@@ -50,6 +54,9 @@ async def list_memories(
     if namespace_id is not None:
         where_clauses.append("namespace_id = :ns")
         params["ns"] = namespace_id
+    if source_app is not None:
+        where_clauses.append("source_app = :sapp")
+        params["sapp"] = source_app
 
     where_sql = " AND ".join(where_clauses)
 
@@ -58,7 +65,7 @@ async def list_memories(
             text(
                 f"""
                 SELECT id, namespace_id, walrus_blob_id, model, preview,
-                       token_input, token_output, ts
+                       token_input, token_output, source_app, source_app_raw, ts
                   FROM entries
                  WHERE {where_sql}
                  ORDER BY ts DESC
@@ -82,6 +89,8 @@ async def list_memories(
             "preview": r.preview,
             "token_input": r.token_input,
             "token_output": r.token_output,
+            "source_app": r.source_app,
+            "source_app_raw": r.source_app_raw,
             "ts": r.ts.isoformat() if r.ts else None,
         }
         for r in rows
