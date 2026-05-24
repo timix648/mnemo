@@ -3,7 +3,8 @@ Proxy authentication.
 
 The user_id in the URL path is public. Real auth is the bearer token in
 Authorization, which must match the user's `proxy_token` column. We also
-load the user's default namespace ID for capture jobs.
+load the user's default namespace (id + label) for capture jobs — the label
+is the grouping string the relayer indexes under.
 """
 import logging
 from dataclasses import dataclass
@@ -22,6 +23,7 @@ class AuthedUser:
     id: UUID
     sui_address: str
     default_namespace_id: Optional[UUID]
+    default_namespace_label: Optional[str] = None
 
 
 async def authenticate(user_id: str, bearer: Optional[str]) -> Optional[AuthedUser]:
@@ -41,11 +43,15 @@ async def authenticate(user_id: str, bearer: Optional[str]) -> Optional[AuthedUs
             text(
                 """
                 SELECT u.id, u.sui_address, u.proxy_token,
-                       (SELECT id FROM namespaces n
-                          WHERE n.user_id = u.id
-                          ORDER BY n.is_default DESC, n.created_at ASC
-                          LIMIT 1) AS default_namespace_id
+                       n.id   AS default_namespace_id,
+                       n.name AS default_namespace_label
                   FROM users u
+                  LEFT JOIN LATERAL (
+                       SELECT id, name FROM namespaces
+                        WHERE user_id = u.id
+                        ORDER BY is_default DESC, created_at ASC
+                        LIMIT 1
+                  ) n ON TRUE
                  WHERE u.id = :uid
                 """
             ),
@@ -60,4 +66,5 @@ async def authenticate(user_id: str, bearer: Optional[str]) -> Optional[AuthedUs
             id=rec.id,
             sui_address=rec.sui_address,
             default_namespace_id=rec.default_namespace_id,
+            default_namespace_label=rec.default_namespace_label,
         )

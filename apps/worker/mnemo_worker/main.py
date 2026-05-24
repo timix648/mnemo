@@ -9,6 +9,11 @@ The worker no longer embeds or encrypts. It keeps a LIGHTWEIGHT row in the
 `entries` table (no embedding vector) purely as a metadata index so the UI can
 list conversations and map blob_id -> model/preview/tokens/ts. Semantic search
 and recall go through the relayer, not this table.
+
+Resilience: the relayer call can fail transiently (testnet RPC/DNS blips,
+Walrus hiccups, 5xx). Such failures are retried with backoff. If a job still
+fails after retries, it is moved to a dead-letter list (mnemo:captures:dlq)
+rather than dropped, so no capture is ever silently lost.
 """
 import asyncio
 import json
@@ -31,7 +36,12 @@ logging.basicConfig(
 log = logging.getLogger("mnemo.worker")
 
 QUEUE_KEY = "mnemo:captures"
+DLQ_KEY = "mnemo:captures:dlq"
 POP_TIMEOUT_SECONDS = 5
+
+# Transient-failure retry policy for the relayer remember call.
+MAX_REMEMBER_ATTEMPTS = 4
+BACKOFF_BASE_SECONDS = 3.0  # 3s, 6s, 12s between attempts
 
 _engine = None
 _SessionMaker: async_sessionmaker | None = None
@@ -42,6 +52,10 @@ def _handle_shutdown(*_):
     global _running
     log.info("shutdown signal received")
     _running = False
+
+
+class PermanentJobError(Exception):
+    """Job is malformed / unprocessable — do NOT retry, dead-letter it."""
 
 
 def _conversation_text(payload: dict[str, Any]) -> str:
@@ -63,17 +77,60 @@ def _conversation_text(payload: dict[str, Any]) -> str:
     return "\n".join(lines).strip() or "(empty conversation)"
 
 
+async def _remember_with_retry(http: httpx.AsyncClient, body: dict[str, Any]) -> str:
+    """POST to the sidecar remember endpoint, retrying transient failures.
+
+    Returns the walrus blob id. Raises PermanentJobError on unprocessable
+    input, or RuntimeError after the retry budget is exhausted (caller
+    dead-letters in both cases).
+    """
+    last_err: Exception | None = None
+    for attempt in range(1, MAX_REMEMBER_ATTEMPTS + 1):
+        try:
+            resp = await http.post(
+                f"{settings.sidecar_url}/memwal/remember",
+                json=body,
+                timeout=120.0,  # relayer remember can take ~30-90s
+            )
+        except (httpx.TimeoutException, httpx.TransportError) as e:
+            # network-level failure (DNS, connection reset, timeout) — transient
+            last_err = e
+            log.warning("remember attempt %d/%d network error: %s",
+                        attempt, MAX_REMEMBER_ATTEMPTS, e)
+        else:
+            if resp.status_code >= 500:
+                # relayer/sidecar 5xx — transient (RPC blip, Walrus hiccup)
+                last_err = RuntimeError(f"sidecar {resp.status_code}: {resp.text[:300]}")
+                log.warning("remember attempt %d/%d got %d (transient)",
+                            attempt, MAX_REMEMBER_ATTEMPTS, resp.status_code)
+            elif resp.status_code >= 400:
+                # 4xx — client/data problem, not worth retrying
+                raise PermanentJobError(f"sidecar {resp.status_code}: {resp.text[:300]}")
+            else:
+                data = resp.json()
+                blob_id = data.get("walrusBlobId")
+                if not blob_id:
+                    raise PermanentJobError(f"sidecar 200 but no walrusBlobId: {data}")
+                return blob_id
+
+        # transient path: back off before retrying (unless that was the last try)
+        if attempt < MAX_REMEMBER_ATTEMPTS:
+            await asyncio.sleep(BACKOFF_BASE_SECONDS * (2 ** (attempt - 1)))
+
+    raise RuntimeError(f"remember failed after {MAX_REMEMBER_ATTEMPTS} attempts: {last_err}")
+
+
 async def _process_one(job: dict[str, Any], http: httpx.AsyncClient) -> None:
-    user_id = job["user_id"]
-    namespace_id = job["namespace_id"]          # Postgres UUID (entries FK)
-    # Relayer groups memories by an opaque string. The proxy/API supplies it as
-    # `namespace_label` (e.g. the namespace name or its sui_object_id). Fall back
-    # to "default" — the grouping key we proved in the round-trip tests.
-    namespace_label = job.get("namespace_label") or "default"
-    sui_address = job["sui_address"]
-    provider = job["provider"]
-    request_body = job["request_body"]
-    response_body = job["response_body"]
+    try:
+        user_id = job["user_id"]
+        namespace_id = job["namespace_id"]          # Postgres UUID (entries FK)
+        namespace_label = job.get("namespace_label") or "default"
+        sui_address = job["sui_address"]
+        provider = job["provider"]
+        request_body = job["request_body"]
+        response_body = job["response_body"]
+    except (KeyError, TypeError) as e:
+        raise PermanentJobError(f"malformed job, missing field: {e}")
 
     payload = build_payload(provider=provider, request_body=request_body, response_body=response_body)
     preview = preview_of(payload)
@@ -81,21 +138,16 @@ async def _process_one(job: dict[str, Any], http: httpx.AsyncClient) -> None:
 
     # Architecture 1: send TEXT to the relayer (via sidecar). The relayer
     # embeds, Seal-encrypts, uploads to Walrus, and indexes on-chain.
-    rem_resp = (await http.post(
-        f"{settings.sidecar_url}/memwal/remember",
-        json={
-            "ownerAddress": sui_address,
-            "namespaceObjectId": namespace_label,
-            "text": convo_text,
-            "metadata": {
-                "ts": payload["ts"],
-                "model": payload["model"],
-                "provider": payload["provider"],
-            },
+    blob_id = await _remember_with_retry(http, {
+        "ownerAddress": sui_address,
+        "namespaceObjectId": namespace_label,
+        "text": convo_text,
+        "metadata": {
+            "ts": payload["ts"],
+            "model": payload["model"],
+            "provider": payload["provider"],
         },
-        timeout=120.0,  # relayer remember can take ~30-90s (embed+seal+walrus+chain)
-    )).json()
-    blob_id = rem_resp["walrusBlobId"]
+    })
 
     # Lightweight metadata row for the UI (NO embedding — relayer owns search).
     async with _SessionMaker() as s:
@@ -144,12 +196,22 @@ async def _run():
                 if item is None:
                     continue
                 _, raw = item
-                job = json.loads(raw)
+                try:
+                    job = json.loads(raw)
+                except json.JSONDecodeError:
+                    log.error("undecodable job, dead-lettering raw payload")
+                    await redis.rpush(DLQ_KEY, raw)
+                    continue
+
                 try:
                     await _process_one(job, http)
+                except PermanentJobError as e:
+                    log.error("permanent failure, dead-lettering: %s", e)
+                    await redis.rpush(DLQ_KEY, raw)
                 except Exception:
-                    log.exception("failed to process capture job; dropping")
-                    # TODO: route to dead-letter list mnemo:captures:dlq
+                    # transient failure survived all retries — preserve the job
+                    log.exception("processing failed after retries, dead-lettering")
+                    await redis.rpush(DLQ_KEY, raw)
             except asyncio.CancelledError:
                 break
             except Exception:
