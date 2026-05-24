@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from mnemo_api.config import settings
 from mnemo_api.db import init_db, close_db
-from mnemo_api.routers import health, me, namespaces, keys, search
+from mnemo_api.routers import health, me, namespaces, keys, search, memories
 
 logging.basicConfig(
     level=settings.log_level,
@@ -40,3 +40,4 @@ app.include_router(me.router)
 app.include_router(namespaces.router)
 app.include_router(keys.router)
 app.include_router(search.router)
+app.include_router(memories.router)
