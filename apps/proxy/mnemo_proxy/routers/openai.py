@@ -44,8 +44,17 @@ async def chat_completions(
 
     streaming = bool(body.get("stream", False))
     if streaming:
+        # Ask OpenAI to include usage in the final stream chunk so our capture
+        # can record real token counts. Merge with any caller-supplied options.
+        upstream_body = dict(body)
+        existing_opts = upstream_body.get("stream_options") or {}
+        if not isinstance(existing_opts, dict):
+            existing_opts = {}
+        existing_opts.setdefault("include_usage", True)
+        upstream_body["stream_options"] = existing_opts
+        upstream_raw = json.dumps(upstream_body).encode()
         return StreamingResponse(
-            _stream(upstream_url, raw_body, headers, user, body),
+            _stream(upstream_url, upstream_raw, headers, user, body),
             media_type="text/event-stream",
         )
 
@@ -60,6 +69,7 @@ async def chat_completions(
             await enqueue_capture({
                 "user_id": str(user.id),
                 "namespace_id": str(user.default_namespace_id),
+                "namespace_label": user.default_namespace_label or "default",
                 "sui_address": user.sui_address,
                 "provider": "openai",
                 "request_body": body,
@@ -70,10 +80,15 @@ async def chat_completions(
 
 
 async def _stream(upstream_url, raw_body, headers, user, request_body):
-    """Forward an SSE-streamed OpenAI response, accumulating for capture."""
+    """Forward an SSE-streamed OpenAI response, accumulating for capture.
+
+    Captures the final ``usage`` block emitted when ``stream_options.include_usage``
+    is set, so token counts make it into the entries row.
+    """
     parts: list[str] = []
     accum_model: Optional[str] = None
     role: Optional[str] = None
+    usage: Optional[dict] = None
 
     async with httpx.AsyncClient(timeout=120.0) as client:
         async with client.stream("POST", upstream_url, content=raw_body, headers=headers) as resp:
@@ -95,6 +110,10 @@ async def _stream(upstream_url, raw_body, headers, user, request_body):
                     continue
                 if "model" in chunk:
                     accum_model = chunk["model"]
+                # The final usage chunk has an empty `choices` array but a populated
+                # `usage` object. We capture both shapes here.
+                if isinstance(chunk.get("usage"), dict):
+                    usage = chunk["usage"]
                 try:
                     delta = chunk["choices"][0].get("delta", {})
                 except (IndexError, KeyError):
@@ -105,17 +124,20 @@ async def _stream(upstream_url, raw_body, headers, user, request_body):
                     parts.append(delta["content"])
 
     if settings.capture_enabled and parts and user.default_namespace_id:
-        reconstructed = {
+        reconstructed: dict = {
             "model": accum_model,
             "choices": [{
                 "message": {"role": role or "assistant", "content": "".join(parts)},
                 "finish_reason": "stop",
             }],
         }
+        if usage:
+            reconstructed["usage"] = usage
         try:
             await enqueue_capture({
                 "user_id": str(user.id),
                 "namespace_id": str(user.default_namespace_id),
+                "namespace_label": user.default_namespace_label or "default",
                 "sui_address": user.sui_address,
                 "provider": "openai",
                 "request_body": request_body,
