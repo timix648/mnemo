@@ -1,6 +1,11 @@
-"""Semantic search across a user's memory."""
+"""Semantic search across a user's memory (Architecture 1).
+
+Search no longer runs a local pgvector query — the live MemWal relayer owns the
+vector index and decryption. We call the relayer's recall (via the sidecar),
+then enrich each hit with the lightweight metadata row in `entries`
+(model / preview / token counts / ts) for display.
+"""
 from uuid import UUID
-from typing import Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -20,65 +25,95 @@ class SearchRequest(BaseModel):
     top_k: int = Field(default=10, ge=1, le=50)
 
 
-async def _embed(text_in: str) -> list[float]:
-    if not settings.openai_api_key:
-        raise HTTPException(status_code=500, detail="OPENAI_API_KEY not configured in API service")
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        r = await client.post(
-            "https://api.openai.com/v1/embeddings",
-            headers={"Authorization": f"Bearer {settings.openai_api_key}"},
-            json={"model": settings.embedding_model, "input": text_in},
-        )
-        r.raise_for_status()
-        data = r.json()
-    return data["data"][0]["embedding"]
-
-
 @router.post("/search")
 async def search(body: SearchRequest, user: CurrentUser = Depends(require_user)):
-    # Verify the namespace belongs to the user
+    # 1. Verify the namespace belongs to the user, and get its relayer label.
+    #    The relayer groups memories by an opaque string; we use the namespace
+    #    name (falling back to sui_object_id) as that label, matching what the
+    #    capture worker sends.
     async with session() as s:
-        owns = (await s.execute(
-            text("SELECT 1 FROM namespaces WHERE id = :id AND user_id = :uid"),
-            {"id": body.namespace_id, "uid": user.id},
-        )).scalar()
-        if not owns:
-            raise HTTPException(status_code=404, detail="namespace not found")
-
-    query_emb = await _embed(body.query)
-
-    async with session() as s:
-        # pgvector cosine distance: smaller is closer; score = 1 - distance
-        rows = (await s.execute(
+        ns = (await s.execute(
             text(
-                """
-                SELECT id, walrus_blob_id, model, preview, token_input, token_output, ts,
-                       1 - (embedding <=> CAST(:q AS vector)) AS score
-                  FROM entries
-                 WHERE user_id = :uid
-                   AND namespace_id = :ns
-                   AND deleted_at IS NULL
-                   AND embedding IS NOT NULL
-                 ORDER BY embedding <=> CAST(:q AS vector)
-                 LIMIT :k
-                """
+                "SELECT name, sui_object_id FROM namespaces "
+                "WHERE id = :id AND user_id = :uid"
             ),
-            {"uid": user.id, "ns": body.namespace_id, "q": str(query_emb), "k": body.top_k},
-        )).all()
+            {"id": body.namespace_id, "uid": user.id},
+        )).first()
+    if not ns:
+        raise HTTPException(status_code=404, detail="namespace not found")
 
-    return {
-        "results": [
-            {
-                "id": str(r.id),
-                "namespace_id": str(body.namespace_id),
-                "walrus_blob_id": r.walrus_blob_id,
-                "model": r.model,
-                "preview": r.preview,
-                "token_input": r.token_input,
-                "token_output": r.token_output,
-                "ts": r.ts.isoformat(),
-                "score": float(r.score) if r.score is not None else 0.0,
+    namespace_label = ns.name or ns.sui_object_id or "default"
+
+    # 2. Ask the relayer (via the sidecar) for semantic matches + decrypted text.
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                f"{settings.sidecar_url}/memwal/recall",
+                json={
+                    "ownerAddress": user.sui_address,
+                    "namespaceObjectId": namespace_label,
+                    "query": body.query,
+                    "topK": body.top_k,
+                },
+            )
+            resp.raise_for_status()
+            recall = resp.json()
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"recall failed: {e}")
+
+    relayer_results = recall.get("results", [])
+    if not relayer_results:
+        return {"results": []}
+
+    # 3. Enrich each hit with display metadata from `entries` (by blob_id).
+    blob_ids = [r.get("blob_id") for r in relayer_results if r.get("blob_id")]
+    meta_by_blob: dict[str, dict] = {}
+    if blob_ids:
+        async with session() as s:
+            rows = (await s.execute(
+                text(
+                    """
+                    SELECT id, walrus_blob_id, model, preview,
+                           token_input, token_output, ts
+                      FROM entries
+                     WHERE user_id = :uid
+                       AND namespace_id = :ns
+                       AND walrus_blob_id = ANY(:blobs)
+                       AND deleted_at IS NULL
+                    """
+                ),
+                {"uid": user.id, "ns": body.namespace_id, "blobs": blob_ids},
+            )).all()
+        for row in rows:
+            meta_by_blob[row.walrus_blob_id] = {
+                "id": str(row.id),
+                "model": row.model,
+                "preview": row.preview,
+                "token_input": row.token_input,
+                "token_output": row.token_output,
+                "ts": row.ts.isoformat() if row.ts else None,
             }
-            for r in rows
-        ]
-    }
+
+    # 4. Merge: relayer gives match + decrypted text + distance; entries gives
+    #    display metadata. distance is cosine distance (smaller = closer);
+    #    expose score = 1 - distance for UI consistency.
+    out = []
+    for r in relayer_results:
+        blob = r.get("blob_id")
+        meta = meta_by_blob.get(blob, {})
+        distance = r.get("distance")
+        score = (1.0 - float(distance)) if distance is not None else None
+        out.append({
+            "id": meta.get("id"),
+            "namespace_id": str(body.namespace_id),
+            "walrus_blob_id": blob,
+            "text": r.get("text"),          # decrypted memory from the relayer
+            "model": meta.get("model"),
+            "preview": meta.get("preview"),
+            "token_input": meta.get("token_input"),
+            "token_output": meta.get("token_output"),
+            "ts": meta.get("ts"),
+            "score": score,
+        })
+
+    return {"results": out}
