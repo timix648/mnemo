@@ -1,73 +1,68 @@
 "use client";
 
-import { useState } from "react";
-import { Brain, Search, Filter } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Brain, Search, Filter, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { getMemories, type Memory } from "@/lib/api";
+import { DEV_TEST_USER } from "@/config/sui";
 
-const FAKE_CHATS = [
-  {
-    id: "1",
-    app: "Cursor",
-    model: "gpt-4o",
-    timestamp: "2026-05-18 · 11:42 AM",
-    prompt: "Why is my useEffect running twice in React 18? I have a fetch call inside and it's causing duplicate API requests on mount.",
-    response: "This is expected behavior in React 18 Strict Mode. During development, React intentionally mounts components twice to help detect side effects...",
-  },
-  {
-    id: "2",
-    app: "BoltAI",
-    model: "claude-sonnet",
-    timestamp: "2026-05-17 · 3:15 PM",
-    prompt: "Can you explain how Sui Move's object ownership model differs from Ethereum's account model?",
-    response: "Sui Move uses an object-centric model where every piece of state is an explicit object with a unique ID and a defined owner...",
-  },
-  {
-    id: "3",
-    app: "Cursor",
-    model: "gpt-4o",
-    timestamp: "2026-05-16 · 9:08 AM",
-    prompt: "Write a Python FastAPI endpoint that accepts a streaming response from OpenAI and proxies it back to the client using Server-Sent Events.",
-    response: "Here's a complete FastAPI streaming proxy endpoint. We use StreamingResponse with an async generator that yields each SSE chunk as it arrives...",
-  },
-  {
-    id: "4",
-    app: "TypingMind",
-    model: "gpt-4-turbo",
-    timestamp: "2026-05-14 · 6:30 PM",
-    prompt: "What's the difference between pgvector's ivfflat and hnsw index types? Which should I use for a semantic search application with ~1M vectors?",
-    response: "For 1M vectors in a semantic search application, HNSW is almost always the better choice. IVFFlat requires a training step and struggles with recall...",
-  },
-  {
-    id: "5",
-    app: "BoltAI",
-    model: "claude-sonnet",
-    timestamp: "2026-05-12 · 2:00 PM",
-    prompt: "Help me write a Sui Move module for a simple registry that maps addresses to string identifiers.",
-    response: "Here's a clean Sui Move registry module using a Table for the mapping and proper event emission for indexers...",
-  },
-];
-
-const APP_FILTERS = ["All", "Cursor", "BoltAI", "TypingMind"];
+const APP_FILTERS = ["All", "Mnemo"];
 
 const APP_COLORS: Record<string, string> = {
-  Cursor: "bg-blue-100 text-blue-700",
-  BoltAI: "bg-purple-100 text-purple-700",
-  TypingMind: "bg-green-100 text-green-700",
+  Mnemo: "bg-slate-100 text-slate-700",
+};
+
+function formatDate(ts: string) {
+  return new Date(ts).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+type ChatItem = {
+  blob_id: string;
+  app: string;
+  model: string;
+  ts: string;
+  preview: string;
 };
 
 export default function ChatsPage() {
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("All");
+  const [chats, setChats] = useState<ChatItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [backendError, setBackendError] = useState(false);
+  const [total, setTotal] = useState(0);
 
-  const filtered = FAKE_CHATS.filter((c) => {
+  useEffect(() => {
+    getMemories(DEV_TEST_USER.user_id, DEV_TEST_USER.default_namespace_id)
+      .then((data) => {
+        const mapped = (data.memories ?? []).map((m: Memory) => ({
+          blob_id: m.blob_id,
+          app: "Mnemo",
+          model: m.model,
+          ts: m.ts,
+          preview: m.preview,
+        }));
+        setChats(mapped);
+        setTotal(data.total ?? mapped.length);
+      })
+      .catch(() => setBackendError(true))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = chats.filter((c) => {
     const matchesApp = activeFilter === "All" || c.app === activeFilter;
     const matchesSearch =
       search === "" ||
-      c.prompt.toLowerCase().includes(search.toLowerCase()) ||
-      c.response.toLowerCase().includes(search.toLowerCase());
+      c.preview.toLowerCase().includes(search.toLowerCase());
     return matchesApp && matchesSearch;
   });
 
@@ -89,12 +84,24 @@ export default function ChatsPage() {
       <div className="flex flex-col gap-6 px-6 py-8 max-w-4xl mx-auto w-full">
 
         {/* Header */}
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-bold">My Memory</h1>
-          <p className="text-muted-foreground text-sm">
-            {FAKE_CHATS.length} conversations captured across all providers
-          </p>
+        <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-1">
+            <h1 className="text-2xl font-bold">My Memory</h1>
+            <p className="text-muted-foreground text-sm">
+              {loading
+                ? "Loading..."
+                : `${total} conversation${total !== 1 ? "s" : ""} captured`}
+            </p>
+          </div>
+          {loading && <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />}
         </div>
+
+        {/* Error banner */}
+        {backendError && (
+          <div className="rounded-lg bg-yellow-50 border border-yellow-200 px-4 py-3 text-sm text-yellow-800">
+            ⚠️ Could not reach backend — please check your services are running.
+          </div>
+        )}
 
         {/* Search + Filter */}
         <div className="flex flex-col gap-3">
@@ -128,35 +135,47 @@ export default function ChatsPage() {
 
         {/* Chat list */}
         <div className="flex flex-col gap-3">
-          {filtered.length === 0 ? (
-            <div className="text-center py-16 text-muted-foreground text-sm">
-              No conversations match your search.
+          {loading ? (
+            <div className="flex flex-col gap-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="rounded-xl border bg-muted p-5 h-36 animate-pulse" />
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-24 text-center gap-3">
+              <Brain className="w-10 h-10 text-muted-foreground/40" />
+              <p className="font-medium">No memories yet</p>
+              <p className="text-muted-foreground text-sm max-w-sm">
+                Start using AI tools with your Mnemo proxy endpoint and your
+                conversations will appear here automatically.
+              </p>
+              <Link href="/onboard">
+                <Button size="sm" variant="outline">Set up your proxy</Button>
+              </Link>
             </div>
           ) : (
             filtered.map((chat) => (
               <div
-                key={chat.id}
+                key={chat.blob_id}
                 className="rounded-xl border bg-card p-5 flex flex-col gap-3 hover:shadow-sm transition-shadow cursor-pointer"
               >
                 {/* Meta */}
                 <div className="flex items-center gap-2">
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${APP_COLORS[chat.app]}`}>
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${APP_COLORS[chat.app] ?? "bg-gray-100 text-gray-700"}`}>
                     From {chat.app}
                   </span>
                   <Badge variant="outline" className="text-xs">{chat.model}</Badge>
-                  <span className="text-xs text-muted-foreground ml-auto">{chat.timestamp}</span>
+                  <span className="text-xs text-muted-foreground ml-auto">
+                    {formatDate(chat.ts)}
+                  </span>
                 </div>
 
-                {/* Prompt */}
+                {/* Preview */}
                 <div className="flex flex-col gap-1">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Prompt</p>
-                  <p className="text-sm line-clamp-2">{chat.prompt}</p>
-                </div>
-
-                {/* Response */}
-                <div className="flex flex-col gap-1">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Response</p>
-                  <p className="text-sm text-muted-foreground line-clamp-2">{chat.response}</p>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Prompt
+                  </p>
+                  <p className="text-sm line-clamp-2">{chat.preview}</p>
                 </div>
 
                 {/* Actions */}
