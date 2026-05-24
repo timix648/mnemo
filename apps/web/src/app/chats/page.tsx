@@ -26,7 +26,7 @@ function formatDate(ts: string) {
 }
 
 type ChatItem = {
-  blob_id: string;
+  id: string;
   app: string;
   model: string;
   ts: string;
@@ -44,8 +44,8 @@ export default function ChatsPage() {
   useEffect(() => {
     getMemories(DEV_TEST_USER.user_id, DEV_TEST_USER.default_namespace_id)
       .then((data) => {
-        const mapped = (data.memories ?? []).map((m: Memory) => ({
-          blob_id: m.blob_id,
+        const mapped = (data.results ?? []).map((m: Memory) => ({
+          id: m.id,
           app: "Mnemo",
           model: m.model,
           ts: m.ts,
@@ -156,7 +156,7 @@ export default function ChatsPage() {
           ) : (
             filtered.map((chat) => (
               <div
-                key={chat.blob_id}
+                key={chat.id}
                 className="rounded-xl border bg-card p-5 flex flex-col gap-3 hover:shadow-sm transition-shadow cursor-pointer"
               >
                 {/* Meta */}

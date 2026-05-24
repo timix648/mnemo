@@ -20,10 +20,11 @@ export default function OnboardPage() {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const progress = ((step + 1) / STEPS.length) * 100;
-
-  // Fallback endpoint for when API isn't available
   const endpoint = me?.proxy_base_url ?? "https://proxy.mnemo.app/v1/loading...";
   const proxyToken = me?.proxy_token ?? "loading...";
 
@@ -38,6 +39,33 @@ export default function OnboardPage() {
     navigator.clipboard.writeText(text);
     setter(true);
     setTimeout(() => setter(false), 2000);
+  }
+
+  async function handleSaveKey() {
+    if (!apiKey.trim()) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const res = await fetch("http://127.0.0.1:8001/keys", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Dev-User": DEV_TEST_USER.user_id,
+        },
+        body: JSON.stringify({
+          provider,
+          walrus_blob_id: `dev_${provider}_${Date.now()}`,
+          seal_policy_id: `dev_policy_${provider}`,
+        }),
+      });
+      if (!res.ok) throw new Error(`Failed: ${res.status}`);
+      setSaveSuccess(true);
+      setTimeout(() => setStep(1), 800);
+    } catch {
+      setSaveError("Could not save key — backend unreachable.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -61,7 +89,7 @@ export default function OnboardPage() {
             <Progress value={progress} className="h-1.5 mt-2" />
           </div>
 
-          {/* Error banner */}
+          {/* Backend error banner */}
           {error && (
             <div className="rounded-lg bg-yellow-50 border border-yellow-200 px-4 py-3 text-sm text-yellow-800">
               ⚠️ {error}
@@ -99,12 +127,24 @@ export default function OnboardPage() {
                 </TabsContent>
               </Tabs>
 
+              {saveError && (
+                <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+                  ⚠️ {saveError}
+                </div>
+              )}
+
               <Button
                 className="w-full"
-                disabled={!apiKey}
-                onClick={() => setStep(1)}
+                disabled={!apiKey || saving}
+                onClick={handleSaveKey}
               >
-                Encrypt and save <ChevronRight className="w-4 h-4 ml-1" />
+                {saving ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</>
+                ) : saveSuccess ? (
+                  <><Check className="w-4 h-4 mr-2" />Saved!</>
+                ) : (
+                  <>Encrypt and save <ChevronRight className="w-4 h-4 ml-1" /></>
+                )}
               </Button>
             </div>
           )}
@@ -124,7 +164,6 @@ export default function OnboardPage() {
                 </div>
               ) : (
                 <>
-                  {/* Proxy URL */}
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                       Proxy URL
@@ -141,7 +180,6 @@ export default function OnboardPage() {
                     </div>
                   </div>
 
-                  {/* Proxy Token */}
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                       API Token
@@ -158,7 +196,6 @@ export default function OnboardPage() {
                     </div>
                   </div>
 
-                  {/* Test snippet */}
                   <div className="rounded-lg bg-muted p-4 text-sm font-mono text-muted-foreground">
                     <p className="text-xs text-muted-foreground mb-2">Test it in your terminal:</p>
                     curl {endpoint}/chat/completions \<br />

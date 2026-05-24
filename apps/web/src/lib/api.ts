@@ -11,8 +11,8 @@ export interface MeResponse {
 }
 
 export interface SearchResult {
-  blob_id: string;
   id: string;
+  blob_id: string;
   text: string;
   preview: string;
   model: string;
@@ -21,11 +21,14 @@ export interface SearchResult {
 }
 
 export interface Memory {
-  blob_id: string;
-  preview: string;
-  model: string;
-  ts: string;
+  id: string;
   namespace_id: string;
+  walrus_blob_id: string;
+  model: string;
+  preview: string;
+  token_input: number;
+  token_output: number;
+  ts: string;
 }
 
 export async function getMe(userId: string): Promise<MeResponse> {
@@ -63,7 +66,7 @@ export async function getMemories(
   namespaceId: string,
   limit = 20,
   offset = 0,
-): Promise<{ memories: Memory[]; total: number }> {
+): Promise<{ results: Memory[]; total: number }> {
   const res = await fetch(
     `${API_BASE}/memories?namespace_id=${namespaceId}&limit=${limit}&offset=${offset}`,
     {
