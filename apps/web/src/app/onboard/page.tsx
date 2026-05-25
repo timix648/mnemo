@@ -8,10 +8,12 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getMe, type MeResponse } from "@/lib/api";
 import { DEV_TEST_USER } from "@/config/sui";
+import { useEnokiFlow } from "@mysten/enoki/react";
 
-const STEPS = ["Your API Key", "Your Endpoint", "Configure Your Tool"];
+const STEPS = ["Sign In", "Your API Key", "Your Endpoint", "Configure Your Tool"];
 
 export default function OnboardPage() {
+  const flow = useEnokiFlow();
   const [step, setStep] = useState(0);
   const [provider, setProvider] = useState<"openai" | "anthropic">("openai");
   const [apiKey, setApiKey] = useState("");
@@ -29,11 +31,33 @@ export default function OnboardPage() {
   const proxyToken = me?.proxy_token ?? "loading...";
 
   useEffect(() => {
-    getMe(DEV_TEST_USER.user_id)
-      .then(setMe)
-      .catch(() => setError("Could not reach backend. Showing placeholder data."))
-      .finally(() => setLoading(false));
-  }, []);
+  // If coming from auth callback, skip sign-in step
+  const fromCallback = document.referrer.includes("/auth/callback") ||
+    sessionStorage.getItem("mnemo_authed") === "true";
+  if (fromCallback) {
+    sessionStorage.setItem("mnemo_authed", "true");
+    setStep(1);
+  }
+
+  getMe(DEV_TEST_USER.user_id)
+    .then(setMe)
+    .catch(() => setError("Could not reach backend. Showing placeholder data."))
+    .finally(() => setLoading(false));
+}, []);
+
+  async function handleGoogleLogin() {
+    try {
+      const url = await flow.createAuthorizationURL({
+        provider: "google",
+        network: "testnet",
+        clientId: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "",
+        redirectUrl: `${window.location.origin}/auth/callback`,
+      });
+      window.location.href = url;
+    } catch (err) {
+      console.error("Login failed:", err);
+    }
+  }
 
   function handleCopy(text: string, setter: (v: boolean) => void) {
     navigator.clipboard.writeText(text);
@@ -60,7 +84,7 @@ export default function OnboardPage() {
       });
       if (!res.ok) throw new Error(`Failed: ${res.status}`);
       setSaveSuccess(true);
-      setTimeout(() => setStep(1), 800);
+      setTimeout(() => setStep(2), 800);
     } catch {
       setSaveError("Could not save key — backend unreachable.");
     } finally {
@@ -96,8 +120,21 @@ export default function OnboardPage() {
             </div>
           )}
 
-          {/* Step 1 — API Key */}
+          {/* Step 0 — Sign In */}
           {step === 0 && (
+            <div className="flex flex-col gap-4">
+              <p className="text-muted-foreground text-sm">
+                Sign in with Google to create your encrypted Mnemo account.
+                Your identity is managed via zkLogin — Mnemo never sees your password.
+              </p>
+              <Button className="w-full" size="lg" onClick={handleGoogleLogin}>
+                Sign in with Google
+              </Button>
+            </div>
+          )}
+
+          {/* Step 1 — API Key */}
+          {step === 1 && (
             <div className="flex flex-col gap-4">
               <p className="text-muted-foreground text-sm">
                 Paste your API key below. It will be encrypted with Seal before
@@ -150,7 +187,7 @@ export default function OnboardPage() {
           )}
 
           {/* Step 2 — Endpoint */}
-          {step === 1 && (
+          {step === 2 && (
             <div className="flex flex-col gap-4">
               <p className="text-muted-foreground text-sm">
                 This is your personal Mnemo proxy endpoint. Paste it into any
@@ -195,24 +232,17 @@ export default function OnboardPage() {
                       </Button>
                     </div>
                   </div>
-
-                  <div className="rounded-lg bg-muted p-4 text-sm font-mono text-muted-foreground">
-                    <p className="text-xs text-muted-foreground mb-2">Test it in your terminal:</p>
-                    curl {endpoint}/chat/completions \<br />
-                    &nbsp;&nbsp;-H &quot;Content-Type: application/json&quot; \<br />
-                    &nbsp;&nbsp;-d &apos;{"{"}&quot;model&quot;:&quot;gpt-4o&quot;,&quot;messages&quot;:[{"{"}&quot;role&quot;:&quot;user&quot;,&quot;content&quot;:&quot;hi&quot;{"}"}]{"}"}&apos;
-                  </div>
                 </>
               )}
 
-              <Button className="w-full" onClick={() => setStep(2)} disabled={loading}>
+              <Button className="w-full" onClick={() => setStep(3)} disabled={loading}>
                 Next <ChevronRight className="w-4 h-4 ml-1" />
               </Button>
             </div>
           )}
 
           {/* Step 3 — Configure tool */}
-          {step === 2 && (
+          {step === 3 && (
             <div className="flex flex-col gap-4">
               <p className="text-muted-foreground text-sm">
                 Choose your AI tool below and follow the instructions to start

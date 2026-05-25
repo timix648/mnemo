@@ -1,8 +1,27 @@
+"use client";
+
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Brain, Shield, GitFork } from "lucide-react";
+import { useEnokiFlow } from "@mysten/enoki/react";
 
 export default function LandingPage() {
+  const flow = useEnokiFlow();
+
+  async function handleGoogleSignIn() {
+    try {
+      const url = await flow.createAuthorizationURL({
+        provider: "google",
+        network: "testnet",
+        clientId: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "",
+        redirectUrl: `${window.location.origin}/auth/callback`,
+      });
+      window.location.href = url;
+    } catch (err) {
+      console.error("Sign in failed:", err);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-background flex flex-col">
 
@@ -12,9 +31,7 @@ export default function LandingPage() {
           <Brain className="w-6 h-6 text-primary" />
           <span className="font-bold text-lg tracking-tight">Mnemo</span>
         </div>
-        <Link href="/onboard">
-          <Button size="sm">Get Started</Button>
-        </Link>
+        <Button size="sm" onClick={handleGoogleSignIn}>Get Started</Button>
       </nav>
 
       {/* Hero */}
@@ -36,9 +53,9 @@ export default function LandingPage() {
         </p>
 
         <div className="flex gap-3 mt-2">
-          <Link href="/onboard">
-            <Button size="lg">Sign in with Google</Button>
-          </Link>
+          <Button size="lg" onClick={handleGoogleSignIn}>
+            Sign in with Google
+          </Button>
           <Link href="/search">
             <Button size="lg" variant="outline">See how it works</Button>
           </Link>
@@ -47,7 +64,6 @@ export default function LandingPage() {
 
       {/* Value props */}
       <section className="grid grid-cols-1 md:grid-cols-3 gap-6 px-6 pb-24 max-w-5xl mx-auto w-full">
-
         <div className="rounded-xl border bg-card p-6 flex flex-col gap-3">
           <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
             <Brain className="w-5 h-5 text-primary" />
@@ -80,7 +96,6 @@ export default function LandingPage() {
             designated recipient gains access. Your AI memory outlives you.
           </p>
         </div>
-
       </section>
 
       {/* Footer */}

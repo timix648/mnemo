@@ -6,18 +6,21 @@ export interface MeResponse {
   proxy_token: string;
   proxy_base_url: string;
   default_namespace_id: string;
-  memwal_account_id: string;
-  memwal_package_id: string;
 }
 
 export interface SearchResult {
-  id: string;
-  blob_id: string;
+  id: string | null;
+  namespace_id: string;
+  walrus_blob_id: string;
   text: string;
   preview: string;
   model: string;
   score: number;
   ts: string;
+  token_input: number;
+  token_output: number;
+  source_app: string | null;
+  source_app_raw: string | null;
 }
 
 export interface Memory {
@@ -28,6 +31,8 @@ export interface Memory {
   preview: string;
   token_input: number;
   token_output: number;
+  source_app: string | null;
+  source_app_raw: string | null;
   ts: string;
 }
 
@@ -44,7 +49,7 @@ export async function searchMemories(
   namespaceId: string,
   query: string,
   topK = 10,
-): Promise<{ results: SearchResult[]; total: number }> {
+): Promise<{ results: SearchResult[] }> {
   const res = await fetch(`${API_BASE}/search`, {
     method: "POST",
     headers: {
@@ -66,13 +71,29 @@ export async function getMemories(
   namespaceId: string,
   limit = 20,
   offset = 0,
+  sourceApp?: string,
 ): Promise<{ results: Memory[]; total: number }> {
-  const res = await fetch(
-    `${API_BASE}/memories?namespace_id=${namespaceId}&limit=${limit}&offset=${offset}`,
-    {
-      headers: { "X-Dev-User": userId },
-    },
-  );
+  const params = new URLSearchParams({
+    namespace_id: namespaceId,
+    limit: String(limit),
+    offset: String(offset),
+  });
+  if (sourceApp) params.set("source_app", sourceApp);
+
+  const res = await fetch(`${API_BASE}/memories?${params}`, {
+    headers: { "X-Dev-User": userId },
+  });
   if (!res.ok) throw new Error(`/memories failed: ${res.status}`);
   return res.json();
+}
+
+export async function deleteMemory(
+  userId: string,
+  memoryId: string,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/memories/${memoryId}`, {
+    method: "DELETE",
+    headers: { "X-Dev-User": userId },
+  });
+  if (!res.ok) throw new Error(`/memories delete failed: ${res.status}`);
 }

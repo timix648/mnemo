@@ -1,18 +1,24 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Brain, Search, Filter, Loader2 } from "lucide-react";
+import { Brain, Search, Filter, Loader2, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { getMemories, type Memory } from "@/lib/api";
+import { getMemories, deleteMemory, type Memory } from "@/lib/api";
 import { DEV_TEST_USER } from "@/config/sui";
 
-const APP_FILTERS = ["All", "Mnemo"];
+const APP_FILTERS = ["All", "Cursor", "Bolt_AI", "TypingMind", "Other"];
 
 const APP_COLORS: Record<string, string> = {
-  Mnemo: "bg-slate-100 text-slate-700",
+  cursor: "bg-blue-100 text-blue-700",
+  bolt_ai: "bg-purple-100 text-purple-700",
+  typingmind: "bg-green-100 text-green-700",
+  openai_sdk: "bg-orange-100 text-orange-700",
+  mnemo: "bg-slate-100 text-slate-700",
+  other: "bg-gray-100 text-gray-700",
+  unknown: "bg-gray-100 text-gray-700",
 };
 
 function formatDate(ts: string) {
@@ -40,13 +46,14 @@ export default function ChatsPage() {
   const [loading, setLoading] = useState(true);
   const [backendError, setBackendError] = useState(false);
   const [total, setTotal] = useState(0);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     getMemories(DEV_TEST_USER.user_id, DEV_TEST_USER.default_namespace_id)
       .then((data) => {
         const mapped = (data.results ?? []).map((m: Memory) => ({
           id: m.id,
-          app: "Mnemo",
+          app: m.source_app || "unknown",
           model: m.model,
           ts: m.ts,
           preview: m.preview,
@@ -58,8 +65,22 @@ export default function ChatsPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  async function handleDelete(id: string, e: React.MouseEvent) {
+    e.preventDefault();
+    setDeletingId(id);
+    try {
+      await deleteMemory(DEV_TEST_USER.user_id, id);
+      setChats((prev) => prev.filter((c) => c.id !== id));
+      setTotal((prev) => prev - 1);
+    } catch {
+      alert("Failed to delete memory. Please check if the backend is running.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   const filtered = chats.filter((c) => {
-    const matchesApp = activeFilter === "All" || c.app === activeFilter;
+    const matchesApp = activeFilter === "All" || c.app.toLowerCase() === activeFilter.toLowerCase();
     const matchesSearch =
       search === "" ||
       c.preview.toLowerCase().includes(search.toLowerCase());
@@ -115,7 +136,7 @@ export default function ChatsPage() {
             />
           </div>
 
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center flex-wrap">
             <Filter className="w-4 h-4 text-muted-foreground" />
             {APP_FILTERS.map((f) => (
               <button
@@ -127,7 +148,7 @@ export default function ChatsPage() {
                     : "bg-background text-muted-foreground hover:bg-muted"
                 }`}
               >
-                {f}
+                {f.replace("_", " ")}
               </button>
             ))}
           </div>
@@ -161,8 +182,8 @@ export default function ChatsPage() {
               >
                 {/* Meta */}
                 <div className="flex items-center gap-2">
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${APP_COLORS[chat.app] ?? "bg-gray-100 text-gray-700"}`}>
-                    From {chat.app}
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${APP_COLORS[chat.app.toLowerCase()] ?? APP_COLORS["unknown"]}`}>
+                    From {chat.app.replace("_", " ")}
                   </span>
                   <Badge variant="outline" className="text-xs">{chat.model}</Badge>
                   <span className="text-xs text-muted-foreground ml-auto">
@@ -179,10 +200,19 @@ export default function ChatsPage() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex gap-2 mt-1">
+                <div className="flex gap-2 mt-1 justify-between items-center w-full">
                   <Link href="/search">
                     <Button size="sm" variant="outline">Search similar</Button>
                   </Link>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-8 w-8"
+                    onClick={(e) => handleDelete(chat.id, e)}
+                    disabled={deletingId === chat.id}
+                  >
+                    {deletingId === chat.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  </Button>
                 </div>
               </div>
             ))

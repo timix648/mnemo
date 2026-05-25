@@ -10,10 +10,13 @@ import { searchMemories, type SearchResult } from "@/lib/api";
 import { DEV_TEST_USER } from "@/config/sui";
 
 const APP_COLORS: Record<string, string> = {
-  Cursor: "bg-blue-100 text-blue-700",
-  BoltAI: "bg-purple-100 text-purple-700",
-  TypingMind: "bg-green-100 text-green-700",
-  Mnemo: "bg-slate-100 text-slate-700",
+  cursor: "bg-blue-100 text-blue-700",
+  bolt_ai: "bg-purple-100 text-purple-700",
+  typingmind: "bg-green-100 text-green-700",
+  openai_sdk: "bg-orange-100 text-orange-700",
+  mnemo: "bg-slate-100 text-slate-700",
+  other: "bg-gray-100 text-gray-700",
+  unknown: "bg-gray-100 text-gray-700",
 };
 
 function formatDate(ts: string) {
@@ -69,13 +72,13 @@ export default function SearchPage() {
   }
 
   function addToContext(result: SearchResult) {
-    if (!context.find((c) => (c.id ?? c.blob_id) === (result.id ?? result.blob_id))) {
+    if (!context.find((c) => (c.id ?? c.walrus_blob_id) === (result.id ?? result.walrus_blob_id))) {
       setContext((prev) => [...prev, result]);
     }
   }
 
   function removeFromContext(blobId: string) {
-    setContext((prev) => prev.filter((c) => (c.id ?? c.blob_id) !== blobId));
+    setContext((prev) => prev.filter((c) => (c.id ?? c.walrus_blob_id) !== blobId));
   }
 
   function handleCopyContext() {
@@ -169,10 +172,10 @@ export default function SearchPage() {
                 </div>
               ) : (
                 results.map((r) => (
-                  <div key={r.id ?? r.blob_id} className="rounded-xl border bg-card p-5 flex flex-col gap-3">
+                  <div key={r.id ?? r.walrus_blob_id} className="rounded-xl border bg-card p-5 flex flex-col gap-3">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${APP_COLORS["Mnemo"]}`}>
-                        Mnemo
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${APP_COLORS[(r.source_app || "unknown").toLowerCase()] ?? APP_COLORS["unknown"]}`}>
+                        From {(r.source_app || "Unknown").replace("_", " ")}
                       </span>
                       <Badge variant="outline" className="text-xs">{r.model}</Badge>
                       <ScoreBadge score={r.score} />
@@ -192,10 +195,10 @@ export default function SearchPage() {
                       <Button
                         size="sm"
                         onClick={() => addToContext(r)}
-                        disabled={!!context.find((c) => (c.id ?? c.blob_id) === (r.id ?? r.blob_id))}
+                        disabled={!!context.find((c) => (c.id ?? c.walrus_blob_id) === (r.id ?? r.walrus_blob_id))}
                       >
                         <Plus className="w-3 h-3 mr-1" />
-                        {context.find((c) => (c.id ?? c.blob_id) === (r.id ?? r.blob_id)) ? "Added" : "Add to context"}
+                        {context.find((c) => (c.id ?? c.walrus_blob_id) === (r.id ?? r.walrus_blob_id)) ? "Added" : "Add to context"}
                       </Button>
                     </div>
                   </div>
@@ -217,10 +220,10 @@ export default function SearchPage() {
 
             <div className="flex flex-col gap-2 flex-1">
               {context.map((c) => (
-                <div key={c.blob_id} className="rounded-lg border bg-card p-3 flex flex-col gap-1.5">
+                <div key={c.walrus_blob_id} className="rounded-lg border bg-card p-3 flex flex-col gap-1.5">
                   <div className="flex items-center justify-between">
                     <Badge variant="outline" className="text-xs">{c.model}</Badge>
-                    <button onClick={() => removeFromContext(c.blob_id)}>
+                    <button onClick={() => removeFromContext(c.walrus_blob_id)}>
                       <X className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
                     </button>
                   </div>
