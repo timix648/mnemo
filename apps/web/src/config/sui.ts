@@ -1,5 +1,5 @@
 export const MNEMO_TESTNET = {
-  PACKAGE_ID: "0x7b6c4130a57c3bfc8b4d123a2bc96f962932a7dbd73642fb70da0c8039d5b23d",
+  PACKAGE_ID: "0x140618622e96fe604e8fd1e8a752e1fe44726cdb0622a18020a61955ce918a60",
   REGISTRY_ID: "0xa13e1c5b27d1b5e41c780c3ed2a572219b20bf1c18c5a55f4289ab04e2f515f3",
   CHAIN_ID: "4c78adac",
   RPC_URL: "https://fullnode.testnet.sui.io:443",

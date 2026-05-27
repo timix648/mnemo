@@ -3,14 +3,21 @@
 import { useState, useEffect } from "react";
 import {
   Brain, Key, Heart, GitFork, Download,
-  Trash2, Plus, X, Check, Loader2
+  Trash2, Plus, X, Check, Loader2, ExternalLink
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
+import { useSuiClient } from "@mysten/dapp-kit";
+import { useEnokiFlow, useZkLogin } from "@mysten/enoki/react";
 import { DEV_TEST_USER } from "@/config/sui";
+import {
+  saveInheritance,
+  sendHeartbeat,
+  InheritanceError,
+} from "@/lib/inheritance";
 
 const API_BASE = "http://127.0.0.1:8001";
 
@@ -22,6 +29,11 @@ interface ProviderKey {
 }
 
 export default function SettingsPage() {
+  // dapp-kit / Enoki — the user signs & Mnemo sponsors gas via these.
+  const suiClient = useSuiClient();
+  const flow = useEnokiFlow();
+  const { address } = useZkLogin();
+
   const [keys, setKeys] = useState<ProviderKey[]>([]);
   const [keysLoading, setKeysLoading] = useState(true);
   const [revoking, setRevoking] = useState<string | null>(null);
@@ -33,6 +45,7 @@ export default function SettingsPage() {
   const [inheritanceSaving, setInheritanceSaving] = useState(false);
   const [inheritanceSaved, setInheritanceSaved] = useState(false);
   const [inheritanceError, setInheritanceError] = useState<string | null>(null);
+  const [inheritanceTx, setInheritanceTx] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
@@ -71,29 +84,58 @@ export default function SettingsPage() {
     }
   }
 
-  function handleHeartbeat() {
+  // Real on-chain heartbeat (memwal::account::touch_activity), sponsored by
+  // Mnemo. Optimistic UI so the button feels instant; the chain call runs in
+  // the background and the status reflects the real result.
+  async function handleHeartbeat() {
     setPinged(true);
-    setHeartbeatStatus("Active · Last ping just now");
-    setTimeout(() => setPinged(false), 2000);
+    setHeartbeatStatus("Pinging on-chain...");
+    try {
+      if (!address) throw new InheritanceError("Sign in to ping your heartbeat.");
+      await sendHeartbeat(flow, suiClient, address);
+      setHeartbeatStatus("Active · Last ping just now");
+    } catch (e) {
+      // Don't block the demo on a heartbeat failure — keep it soft.
+      setHeartbeatStatus(
+        e instanceof InheritanceError
+          ? e.message
+          : "Couldn't confirm on-chain ping (still counts locally).",
+      );
+    } finally {
+      setTimeout(() => setPinged(false), 2000);
+    }
   }
 
   async function handleSaveInheritance() {
-    if (!recipient.trim()) {
-      setInheritanceError("Please enter a recipient Sui address.");
-      return;
-    }
-    if (!recipient.startsWith("0x")) {
-      setInheritanceError("Recipient must be a valid Sui address starting with 0x.");
-      return;
-    }
-    setInheritanceSaving(true);
     setInheritanceError(null);
+    setInheritanceTx(null);
+
+    if (!address) {
+      setInheritanceError("Please sign in with Google before setting your heir.");
+      return;
+    }
+
+    setInheritanceSaving(true);
     try {
-      await new Promise((r) => setTimeout(r, 1000));
+      const { digest, explorerUrl } = await saveInheritance({
+        flow,
+        suiClient,
+        ownerAddress: address,
+        recipient,
+        thresholdDays: Number(threshold),
+      });
+      setInheritanceTx(explorerUrl);
       setInheritanceSaved(true);
-      setTimeout(() => setInheritanceSaved(false), 3000);
-    } catch {
-      setInheritanceError("Failed to save inheritance config. Try again.");
+      setTimeout(() => setInheritanceSaved(false), 6000);
+      // Setting the heir also stamps last_active on-chain — reflect that.
+      setHeartbeatStatus("Active · Last ping just now");
+      console.log("Inheritance set on-chain:", digest);
+    } catch (e) {
+      setInheritanceError(
+        e instanceof InheritanceError
+          ? e.message
+          : "On-chain save failed. Check your connection and try again.",
+      );
     } finally {
       setInheritanceSaving(false);
     }
@@ -290,6 +332,10 @@ export default function SettingsPage() {
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
               />
+              <p className="text-xs text-muted-foreground">
+                The heir address and silence window are enforced on-chain. The note
+                is delivered with the decryption key (stored off-chain).
+              </p>
             </div>
           </div>
 
@@ -300,8 +346,18 @@ export default function SettingsPage() {
           )}
 
           {inheritanceSaved && (
-            <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
-              ✓ Inheritance configuration saved on-chain.
+            <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700 flex flex-col gap-1">
+              <span>✓ Inheritance enforced on-chain.</span>
+              {inheritanceTx && (
+                <a
+                  href={inheritanceTx}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs underline underline-offset-2"
+                >
+                  View transaction <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
             </div>
           )}
 

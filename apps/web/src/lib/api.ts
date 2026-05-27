@@ -36,6 +36,15 @@ export interface Memory {
   ts: string;
 }
 
+export interface SponsorResponse {
+  bytes: string;
+  digest: string;
+}
+
+export interface ExecuteResponse {
+  digest: string;
+}
+
 export async function getMe(userId: string): Promise<MeResponse> {
   const res = await fetch(`${API_BASE}/me`, {
     headers: { "X-Dev-User": userId },
@@ -96,4 +105,54 @@ export async function deleteMemory(
     headers: { "X-Dev-User": userId },
   });
   if (!res.ok) throw new Error(`/memories delete failed: ${res.status}`);
+}
+
+// --- Sponsored transaction helpers ---
+// Talk to the backend's /sponsor and /sponsor/execute, which in turn call
+// Enoki using the PRIVATE API key (the only kind that can sponsor).
+// See apps/api/mnemo_api/routers/sponsor.py.
+
+export async function sponsorTransaction(
+  userId: string,
+  txKindBytesB64: string,
+  sender: string,
+  allowedMoveCallTargets: string[],
+): Promise<SponsorResponse> {
+  const res = await fetch(`${API_BASE}/sponsor`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Dev-User": userId,
+    },
+    body: JSON.stringify({
+      transaction_kind_bytes: txKindBytesB64,
+      sender,
+      allowed_move_call_targets: allowedMoveCallTargets,
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`/sponsor failed: ${res.status} ${text}`);
+  }
+  return res.json();
+}
+
+export async function executeSponsoredApi(
+  userId: string,
+  digest: string,
+  signature: string,
+): Promise<ExecuteResponse> {
+  const res = await fetch(`${API_BASE}/sponsor/execute`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Dev-User": userId,
+    },
+    body: JSON.stringify({ digest, signature }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`/sponsor/execute failed: ${res.status} ${text}`);
+  }
+  return res.json();
 }

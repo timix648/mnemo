@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Brain, Search, Filter, Loader2, Trash2 } from "lucide-react";
+import { Brain, Search, Filter, Loader2, Trash2, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { getMemories, deleteMemory, type Memory } from "@/lib/api";
+import { getMemories, deleteMemory, searchMemories, type Memory } from "@/lib/api";
 import { DEV_TEST_USER } from "@/config/sui";
 
 const APP_FILTERS = ["All", "Cursor", "Bolt_AI", "TypingMind", "Other"];
@@ -39,6 +39,22 @@ type ChatItem = {
   preview: string;
 };
 
+// Split a captured "user: ...\nassistant: ..." blob into turns for display.
+// Falls back to a single block if the format isn't recognized.
+function parseTurns(text: string): { role: string; content: string }[] {
+  const re = /^(user|assistant|system):\s?/gim;
+  const matches = [...text.matchAll(re)];
+  if (matches.length === 0) return [{ role: "exchange", content: text }];
+  const turns: { role: string; content: string }[] = [];
+  for (let i = 0; i < matches.length; i++) {
+    const role = matches[i][1].toLowerCase();
+    const start = matches[i].index! + matches[i][0].length;
+    const end = i + 1 < matches.length ? matches[i + 1].index! : text.length;
+    turns.push({ role, content: text.slice(start, end).trim() });
+  }
+  return turns;
+}
+
 export default function ChatsPage() {
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("All");
@@ -47,6 +63,12 @@ export default function ChatsPage() {
   const [backendError, setBackendError] = useState(false);
   const [total, setTotal] = useState(0);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Conversation-view modal state
+  const [openChat, setOpenChat] = useState<ChatItem | null>(null);
+  const [fullText, setFullText] = useState<string | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState(false);
 
   useEffect(() => {
     getMemories(DEV_TEST_USER.user_id, DEV_TEST_USER.default_namespace_id)
@@ -65,8 +87,49 @@ export default function ChatsPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Close modal on Escape
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") closeModal();
+    }
+    if (openChat) window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [openChat]);
+
+  async function openConversation(chat: ChatItem) {
+    setOpenChat(chat);
+    setFullText(null);
+    setDetailError(false);
+    setDetailLoading(true);
+    try {
+      // No GET /memories/{id} yet — use semantic search with the preview as the
+      // query and match the row back by id (fallback to top hit).
+      const data = await searchMemories(
+        DEV_TEST_USER.user_id,
+        DEV_TEST_USER.default_namespace_id,
+        chat.preview,
+        5,
+      );
+      const hit =
+        data.results.find((r) => r.id === chat.id) ?? data.results[0] ?? null;
+      if (hit?.text) setFullText(hit.text);
+      else setDetailError(true);
+    } catch {
+      setDetailError(true);
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
+  function closeModal() {
+    setOpenChat(null);
+    setFullText(null);
+    setDetailError(false);
+  }
+
   async function handleDelete(id: string, e: React.MouseEvent) {
     e.preventDefault();
+    e.stopPropagation();
     setDeletingId(id);
     try {
       await deleteMemory(DEV_TEST_USER.user_id, id);
@@ -80,10 +143,10 @@ export default function ChatsPage() {
   }
 
   const filtered = chats.filter((c) => {
-    const matchesApp = activeFilter === "All" || c.app.toLowerCase() === activeFilter.toLowerCase();
+    const matchesApp =
+      activeFilter === "All" || c.app.toLowerCase() === activeFilter.toLowerCase();
     const matchesSearch =
-      search === "" ||
-      c.preview.toLowerCase().includes(search.toLowerCase());
+      search === "" || c.preview.toLowerCase().includes(search.toLowerCase());
     return matchesApp && matchesSearch;
   });
 
@@ -102,7 +165,7 @@ export default function ChatsPage() {
         </div>
       </nav>
 
-      <div className="flex flex-col gap-6 px-6 py-8 max-w-4xl mx-auto w-full">
+      <div className="flex flex-col gap-6 px-4 sm:px-6 py-8 max-w-4xl mx-auto w-full">
 
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -137,7 +200,7 @@ export default function ChatsPage() {
           </div>
 
           <div className="flex gap-2 items-center flex-wrap">
-            <Filter className="w-4 h-4 text-muted-foreground" />
+            <Filter className="w-4 h-4 text-muted-foreground shrink-0" />
             {APP_FILTERS.map((f) => (
               <button
                 key={f}
@@ -178,15 +241,16 @@ export default function ChatsPage() {
             filtered.map((chat) => (
               <div
                 key={chat.id}
+                onClick={() => openConversation(chat)}
                 className="rounded-xl border bg-card p-5 flex flex-col gap-3 hover:shadow-sm transition-shadow cursor-pointer"
               >
                 {/* Meta */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${APP_COLORS[chat.app.toLowerCase()] ?? APP_COLORS["unknown"]}`}>
                     From {chat.app.replace("_", " ")}
                   </span>
                   <Badge variant="outline" className="text-xs">{chat.model}</Badge>
-                  <span className="text-xs text-muted-foreground ml-auto">
+                  <span className="text-xs text-muted-foreground sm:ml-auto">
                     {formatDate(chat.ts)}
                   </span>
                 </div>
@@ -201,9 +265,13 @@ export default function ChatsPage() {
 
                 {/* Actions */}
                 <div className="flex gap-2 mt-1 justify-between items-center w-full">
-                  <Link href="/search">
-                    <Button size="sm" variant="outline">Search similar</Button>
-                  </Link>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={(e) => { e.stopPropagation(); openConversation(chat); }}
+                  >
+                    View conversation
+                  </Button>
                   <Button
                     size="icon"
                     variant="ghost"
@@ -219,6 +287,78 @@ export default function ChatsPage() {
           )}
         </div>
       </div>
+
+      {/* Conversation-view modal */}
+      {openChat && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={closeModal}
+        >
+          <div
+            className="bg-background rounded-2xl border shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <div className="flex items-start justify-between gap-3 px-5 sm:px-6 py-4 border-b">
+              <div className="flex flex-col gap-2 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${APP_COLORS[openChat.app.toLowerCase()] ?? APP_COLORS["unknown"]}`}>
+                    From {openChat.app.replace("_", " ")}
+                  </span>
+                  <Badge variant="outline" className="text-xs">{openChat.model}</Badge>
+                </div>
+                <span className="text-xs text-muted-foreground">{formatDate(openChat.ts)}</span>
+              </div>
+              <button
+                onClick={closeModal}
+                className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal body */}
+            <div className="overflow-y-auto px-5 sm:px-6 py-5 flex flex-col gap-4">
+              {detailLoading ? (
+                <div className="flex items-center gap-2 text-muted-foreground text-sm py-8 justify-center">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Decrypting conversation...
+                </div>
+              ) : detailError ? (
+                <div className="rounded-lg bg-yellow-50 border border-yellow-200 px-4 py-3 text-sm text-yellow-800">
+                  Couldn&apos;t load the full conversation. Showing the preview instead:
+                  <p className="mt-2 text-foreground">{openChat.preview}</p>
+                </div>
+              ) : fullText ? (
+                parseTurns(fullText).map((turn, i) => (
+                  <div key={i} className="flex flex-col gap-1">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      {turn.role}
+                    </p>
+                    <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                      {turn.content}
+                    </p>
+                  </div>
+                ))
+              ) : null}
+            </div>
+
+            {/* Modal footer */}
+            <div className="flex justify-end gap-2 px-5 sm:px-6 py-4 border-t">
+              {fullText && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => navigator.clipboard.writeText(fullText)}
+                >
+                  Copy text
+                </Button>
+              )}
+              <Button size="sm" variant="ghost" onClick={closeModal}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,19 +1,24 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Brain, Copy, Check, ChevronRight, Loader2 } from "lucide-react";
+import { Brain, Copy, Check, ChevronRight, Loader2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getMe, type MeResponse } from "@/lib/api";
 import { DEV_TEST_USER } from "@/config/sui";
-import { useEnokiFlow } from "@mysten/enoki/react";
+import { useEnokiFlow, useZkLogin } from "@mysten/enoki/react";
+import { useSuiClient } from "@mysten/dapp-kit";
+import { ensureAccount, lookupAccountId, InheritanceError } from "@/lib/inheritance";
 
 const STEPS = ["Sign In", "Your API Key", "Your Endpoint", "Configure Your Tool"];
 
 export default function OnboardPage() {
   const flow = useEnokiFlow();
+  const suiClient = useSuiClient();
+  const { address } = useZkLogin();
+
   const [step, setStep] = useState(0);
   const [provider, setProvider] = useState<"openai" | "anthropic">("openai");
   const [apiKey, setApiKey] = useState("");
@@ -26,24 +31,82 @@ export default function OnboardPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  // On-chain account creation state.
+  const [accountStatus, setAccountStatus] =
+    useState<"idle" | "checking" | "creating" | "ready" | "error">("idle");
+  const [accountError, setAccountError] = useState<string | null>(null);
+
   const progress = ((step + 1) / STEPS.length) * 100;
   const endpoint = me?.proxy_base_url ?? "https://proxy.mnemo.app/v1/loading...";
   const proxyToken = me?.proxy_token ?? "loading...";
 
   useEffect(() => {
-  // If coming from auth callback, skip sign-in step
-  const fromCallback = document.referrer.includes("/auth/callback") ||
-    sessionStorage.getItem("mnemo_authed") === "true";
-  if (fromCallback) {
-    sessionStorage.setItem("mnemo_authed", "true");
-    setStep(1);
-  }
+    // If coming from auth callback, skip sign-in step
+    const fromCallback = document.referrer.includes("/auth/callback") ||
+      sessionStorage.getItem("mnemo_authed") === "true";
+    if (fromCallback) {
+      sessionStorage.setItem("mnemo_authed", "true");
+      setStep(1);
+    }
 
-  getMe(DEV_TEST_USER.user_id)
-    .then(setMe)
-    .catch(() => setError("Could not reach backend. Showing placeholder data."))
-    .finally(() => setLoading(false));
-}, []);
+    getMe(DEV_TEST_USER.user_id)
+      .then(setMe)
+      .catch(() => setError("Could not reach backend. Showing placeholder data."))
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Once we know the signed-in address, create the on-chain account if it
+  // doesn't exist yet. This is the step that was missing — without it there's
+  // no MemWalAccount for the heir / heartbeat calls to target. Idempotent:
+  // ensureAccount() is a no-op if the account already exists.
+  useEffect(() => {
+    if (!address) return;
+    let cancelled = false;
+    setAccountStatus("checking");
+    setAccountError(null);
+
+    (async () => {
+      try {
+        const existing = await lookupAccountId(suiClient, address);
+        if (cancelled) return;
+        if (existing) {
+          setAccountStatus("ready");
+          return;
+        }
+        setAccountStatus("creating");
+        await ensureAccount(flow, suiClient, address);
+        if (!cancelled) setAccountStatus("ready");
+      } catch (e) {
+        if (cancelled) return;
+        setAccountStatus("error");
+        setAccountError(
+          e instanceof InheritanceError
+            ? e.message
+            : "Couldn't set up your on-chain account. You can retry below.",
+        );
+      }
+    })();
+
+    return () => { cancelled = true; };
+    // re-run if the address changes (e.g. after sign-in)
+  }, [address, flow, suiClient]);
+
+  async function retryAccount() {
+    if (!address) return;
+    setAccountStatus("creating");
+    setAccountError(null);
+    try {
+      await ensureAccount(flow, suiClient, address);
+      setAccountStatus("ready");
+    } catch (e) {
+      setAccountStatus("error");
+      setAccountError(
+        e instanceof InheritanceError
+          ? e.message
+          : "Couldn't set up your on-chain account. Try again.",
+      );
+    }
+  }
 
   async function handleGoogleLogin() {
     try {
@@ -90,6 +153,37 @@ export default function OnboardPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  // Small reusable status chip for the on-chain account.
+  function AccountStatusBadge() {
+    if (accountStatus === "idle") return null;
+    if (accountStatus === "ready") {
+      return (
+        <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700 flex items-center gap-2">
+          <ShieldCheck className="w-4 h-4" />
+          Your on-chain Mnemo account is ready.
+        </div>
+      );
+    }
+    if (accountStatus === "error") {
+      return (
+        <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex flex-col gap-2">
+          <span>⚠️ {accountError}</span>
+          <Button variant="outline" size="sm" className="w-fit" onClick={retryAccount}>
+            Retry account setup
+          </Button>
+        </div>
+      );
+    }
+    return (
+      <div className="rounded-lg bg-muted/40 border px-4 py-3 text-sm text-muted-foreground flex items-center gap-2">
+        <Loader2 className="w-4 h-4 animate-spin" />
+        {accountStatus === "creating"
+          ? "Creating your on-chain account (gas sponsored by Mnemo)..."
+          : "Checking your on-chain account..."}
+      </div>
+    );
   }
 
   return (
@@ -140,6 +234,9 @@ export default function OnboardPage() {
                 Paste your API key below. It will be encrypted with Seal before
                 leaving your browser — Mnemo never sees it in plaintext.
               </p>
+
+              {/* On-chain account setup runs in the background here. */}
+              <AccountStatusBadge />
 
               <Tabs value={provider} onValueChange={(v) => setProvider(v as "openai" | "anthropic")}>
                 <TabsList className="w-full">
@@ -248,6 +345,10 @@ export default function OnboardPage() {
                 Choose your AI tool below and follow the instructions to start
                 capturing your conversations.
               </p>
+
+              {/* Surface account status here too, so the user doesn't leave
+                  onboarding without a working on-chain account. */}
+              <AccountStatusBadge />
 
               <Tabs defaultValue="cursor">
                 <TabsList className="w-full">
