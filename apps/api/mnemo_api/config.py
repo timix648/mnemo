@@ -17,6 +17,11 @@ class Settings(BaseSettings):
 
     enoki_audience: str = ""
 
+    # --- Enoki sponsorship (inheritance transactions) ---
+    enoki_secret_key: str = ""
+    enoki_network: str = "testnet"
+    mnemo_package_id: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
 
 
