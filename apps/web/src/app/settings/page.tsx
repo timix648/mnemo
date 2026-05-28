@@ -16,10 +16,28 @@ import { DEV_TEST_USER } from "@/config/sui";
 import {
   saveInheritance,
   sendHeartbeat,
+  readInheritanceState,
   InheritanceError,
+  type InheritanceState,
 } from "@/lib/inheritance";
 
 const API_BASE = "http://127.0.0.1:8001";
+
+// Turn the on-chain inheritance state into a human-readable heartbeat line.
+function formatHeartbeat(state: InheritanceState): string {
+  if (state.dormancyMs === 0 || !state.heir) {
+    return "Active · inheritance not configured yet";
+  }
+  if (state.isDormant) {
+    return "⚠ DORMANT · your heir can claim access now";
+  }
+  const ms = state.msUntilClaimable ?? 0;
+  const days = Math.floor(ms / 86_400_000);
+  const hours = Math.floor((ms % 86_400_000) / 3_600_000);
+  return days > 0
+    ? `Active · heir can claim in ${days}d ${hours}h of silence`
+    : `Active · heir can claim in ${hours}h of silence`;
+}
 
 interface ProviderKey {
   id: string;
@@ -50,8 +68,30 @@ export default function SettingsPage() {
 
   useEffect(() => {
     fetchKeys();
-    setHeartbeatStatus("Active · Last ping just now");
   }, []);
+
+  // Pull the real on-chain inheritance config once the address resolves, so the
+  // form reflects what's actually set rather than blank defaults.
+  const refreshState = async () => {
+    if (!address) return;
+    try {
+      const state = await readInheritanceState(suiClient, address);
+      if (state) {
+        if (state.heir) setRecipient(state.heir);
+        if (state.dormancyDays > 0) setThreshold(String(state.dormancyDays));
+        setHeartbeatStatus(formatHeartbeat(state));
+      } else {
+        setHeartbeatStatus("No on-chain account yet · finish onboarding");
+      }
+    } catch {
+      setHeartbeatStatus("Couldn't read on-chain status");
+    }
+  };
+
+  useEffect(() => {
+    refreshState();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [address, suiClient]);
 
   async function fetchKeys() {
     try {
@@ -84,16 +124,16 @@ export default function SettingsPage() {
     }
   }
 
-  // Real on-chain heartbeat (memwal::account::touch_activity), sponsored by
-  // Mnemo. Optimistic UI so the button feels instant; the chain call runs in
-  // the background and the status reflects the real result.
+  // Real on-chain heartbeat (account::touch_activity), sponsored by Mnemo.
+  // Optimistic UI so the button feels instant; the chain call runs in the
+  // background and the status reflects the real result (re-read after).
   async function handleHeartbeat() {
     setPinged(true);
     setHeartbeatStatus("Pinging on-chain...");
     try {
       if (!address) throw new InheritanceError("Sign in to ping your heartbeat.");
       await sendHeartbeat(flow, suiClient, address);
-      setHeartbeatStatus("Active · Last ping just now");
+      await refreshState();
     } catch (e) {
       // Don't block the demo on a heartbeat failure — keep it soft.
       setHeartbeatStatus(
@@ -127,8 +167,8 @@ export default function SettingsPage() {
       setInheritanceTx(explorerUrl);
       setInheritanceSaved(true);
       setTimeout(() => setInheritanceSaved(false), 6000);
-      // Setting the heir also stamps last_active on-chain — reflect that.
-      setHeartbeatStatus("Active · Last ping just now");
+      // Setting the heir also stamps last_active on-chain — re-read to reflect it.
+      await refreshState();
       console.log("Inheritance set on-chain:", digest);
     } catch (e) {
       setInheritanceError(
@@ -316,7 +356,7 @@ export default function SettingsPage() {
                   onChange={(e) => setThreshold(e.target.value)}
                   className="w-28"
                   min="1"
-                  max="365"
+                  max="3650"
                 />
                 <span className="text-sm text-muted-foreground">days of inactivity</span>
               </div>

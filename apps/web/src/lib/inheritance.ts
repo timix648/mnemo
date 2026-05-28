@@ -374,3 +374,68 @@ export async function sendHeartbeat(
   );
   return { digest, explorerUrl: explorerTxUrl(digest), accountId: id };
 }
+
+export interface InheritanceState {
+  accountId: string;
+  heir: string | null;
+  dormancyMs: number;
+  dormancyDays: number;
+  lastActiveMs: number;
+  active: boolean;
+  /** ms from now until the heir can claim; null if disabled or already claimable. */
+  msUntilClaimable: number | null;
+  /** true once the dormancy window has lapsed (heir can claim right now). */
+  isDormant: boolean;
+}
+
+/**
+ * Read the owner's current on-chain inheritance config from their MemWalAccount.
+ * Returns null if no account exists yet (not onboarded).
+ */
+export async function readInheritanceState(
+  suiClient: SuiClient,
+  ownerAddress: string,
+): Promise<InheritanceState | null> {
+  const accountId = await lookupAccountId(suiClient, ownerAddress);
+  if (!accountId) return null;
+
+  let obj;
+  try {
+    obj = await suiClient.getObject({ id: accountId, options: { showContent: true } });
+  } catch (e) {
+    throw new InheritanceError(`Couldn't read your on-chain account: ${errMsg(e)}`);
+  }
+
+  const fields = (obj.data?.content as any)?.fields;
+  if (!fields) {
+    throw new InheritanceError(
+      "Your account object couldn't be read. It may be on an older package version.",
+    );
+  }
+
+  // heir is Option<address>: null, a bare "0x..", { fields: { vec: [...] } }, or a bare array.
+  let heir: string | null = null;
+  const rawHeir = fields.heir;
+  if (typeof rawHeir === "string" && rawHeir.startsWith("0x")) {
+    heir = normalizeSuiAddress(rawHeir);
+  } else if (rawHeir?.fields?.vec?.length) {
+    heir = normalizeSuiAddress(rawHeir.fields.vec[0]);
+  } else if (Array.isArray(rawHeir) && rawHeir.length) {
+    heir = normalizeSuiAddress(rawHeir[0]);
+  }
+
+  // u64 fields arrive as strings; epoch ms (~1.7e12) and max dormancy (~3.15e11)
+  // are both far below Number.MAX_SAFE_INTEGER, so Number math is safe.
+  const dormancyMs = Number(fields.dormancy_ms ?? 0);
+  const lastActiveMs = Number(fields.last_active_ms ?? 0);
+  const active = Boolean(fields.active);
+  const dormancyDays = Math.round(dormancyMs / MS_PER_DAY);
+
+  const now = Date.now();
+  const claimableAt = lastActiveMs + dormancyMs;
+  const enabled = dormancyMs > 0 && heir !== null;
+  const isDormant = enabled && now >= claimableAt;
+  const msUntilClaimable = enabled && !isDormant ? claimableAt - now : null;
+
+  return { accountId, heir, dormancyMs, dormancyDays, lastActiveMs, active, msUntilClaimable, isDormant };
+}
