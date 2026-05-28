@@ -129,30 +129,38 @@ export default function OnboardPage() {
   }
 
   async function handleSaveKey() {
-    if (!apiKey.trim()) return;
+    const key = apiKey.trim();
+    if (!key) return;
     setSaving(true);
     setSaveError(null);
+
+    const identityHeaders = address
+      ? { "X-Sui-Address": address }
+      : { "X-Dev-User": DEV_TEST_USER.user_id };
+
     try {
+      // 1. Verify the key actually works with the provider BEFORE storing it.
+      const vRes = await fetch("http://127.0.0.1:8001/keys/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...identityHeaders },
+        body: JSON.stringify({ provider, key }),
+      });
+      if (!vRes.ok) throw new Error(`validate failed: ${vRes.status}`);
+      const v = await vRes.json();
+      if (!v.valid) {
+        setSaveError(v.detail || "That key didn't work — double-check it and try again.");
+        return; // finally still clears `saving`
+      }
+
+      // 2. Key is good — store it.
       const res = await fetch("http://127.0.0.1:8001/keys", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          // Identify as the signed-in user so the key is stored against THEM,
-          // not the shared dev user. `address` is the zkLogin address from
-          // useMnemoIdentity / useZkLogin (the same one onboarding already uses
-          // for account creation). Falls back to dev user if not signed in.
-          ...(address
-            ? { "X-Sui-Address": address }
-            : { "X-Dev-User": DEV_TEST_USER.user_id }),
-        },
-        body: JSON.stringify({
-          provider,
-          key: apiKey.trim(),
-        }),
+        headers: { "Content-Type": "application/json", ...identityHeaders },
+        body: JSON.stringify({ provider, key }),
       });
       if (!res.ok) throw new Error(`Failed: ${res.status}`);
       setSaveSuccess(true);
-      setApiKey("");          
+      setApiKey("");
       setTimeout(() => setStep(2), 800);
     } catch {
       setSaveError("Could not save key — backend unreachable.");
@@ -237,8 +245,10 @@ export default function OnboardPage() {
           {step === 1 && (
             <div className="flex flex-col gap-4">
               <p className="text-muted-foreground text-sm">
-                Paste your API key below. It will be encrypted with Seal before
-                leaving your browser — Mnemo never sees it in plaintext.
+                Paste your API key. We verify it with your provider, then store
+                it on your Mnemo backend and use it only to make calls on your
+                behalf. (Client-side Seal encryption, so the server never holds
+                it in plaintext, is coming before mainnet.)
               </p>
 
               {/* On-chain account setup runs in the background here. */}
@@ -283,7 +293,7 @@ export default function OnboardPage() {
                 ) : saveSuccess ? (
                   <><Check className="w-4 h-4 mr-2" />Saved!</>
                 ) : (
-                  <>Encrypt and save <ChevronRight className="w-4 h-4 ml-1" /></>
+                  <>Validate and save <ChevronRight className="w-4 h-4 ml-1" /></>
                 )}
               </Button>
             </div>
