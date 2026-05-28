@@ -137,16 +137,22 @@ export default function OnboardPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Dev-User": DEV_TEST_USER.user_id,
+          // Identify as the signed-in user so the key is stored against THEM,
+          // not the shared dev user. `address` is the zkLogin address from
+          // useMnemoIdentity / useZkLogin (the same one onboarding already uses
+          // for account creation). Falls back to dev user if not signed in.
+          ...(address
+            ? { "X-Sui-Address": address }
+            : { "X-Dev-User": DEV_TEST_USER.user_id }),
         },
         body: JSON.stringify({
           provider,
-          walrus_blob_id: `dev_${provider}_${Date.now()}`,
-          seal_policy_id: `dev_policy_${provider}`,
+          key: apiKey.trim(),
         }),
       });
       if (!res.ok) throw new Error(`Failed: ${res.status}`);
       setSaveSuccess(true);
+      setApiKey("");          
       setTimeout(() => setStep(2), 800);
     } catch {
       setSaveError("Could not save key — backend unreachable.");
