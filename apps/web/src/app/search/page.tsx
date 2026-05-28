@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { searchMemories, type SearchResult } from "@/lib/api";
-import { DEV_TEST_USER } from "@/config/sui";
+import { useMnemoIdentity } from "@/lib/useMnemoIdentity";
 
 const APP_COLORS: Record<string, string> = {
   cursor: "bg-blue-100 text-blue-700",
@@ -43,6 +43,8 @@ function ScoreBadge({ score }: { score: number }) {
 }
 
 export default function SearchPage() {
+  const { address, namespaceId, ready } = useMnemoIdentity();
+
   const [query, setQuery] = useState("");
   const [hasSearched, setHasSearched] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -53,15 +55,28 @@ export default function SearchPage() {
 
   async function handleSearch() {
     if (!query.trim()) return;
+
+    // Identity must be resolved before we can scope the search to this user.
+    if (!address) {
+      setError("Sign in to search your memory.");
+      setHasSearched(true);
+      return;
+    }
+    if (!namespaceId) {
+      setError(
+        ready
+          ? "No memory namespace yet — capture a conversation first."
+          : "Loading your account… try again in a second.",
+      );
+      setHasSearched(true);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setHasSearched(true);
     try {
-      const data = await searchMemories(
-        DEV_TEST_USER.user_id,
-        DEV_TEST_USER.default_namespace_id,
-        query,
-      );
+      const data = await searchMemories(address, namespaceId, query);
       setResults(data.results);
     } catch {
       setError("Backend unreachable — search unavailable right now.");

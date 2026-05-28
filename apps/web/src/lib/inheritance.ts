@@ -8,7 +8,7 @@ import type { EnokiFlow } from "@mysten/enoki";
 // Alias so the rest of the file reads naturally.
 type SuiClient = SuiJsonRpcClient;
 
-import { MNEMO_TESTNET, DEV_TEST_USER } from "@/config/sui";
+import { MNEMO_TESTNET } from "@/config/sui";
 import { sponsorTransaction, executeSponsoredApi } from "@/lib/api";
 
 const PACKAGE_ID = MNEMO_TESTNET.PACKAGE_ID;
@@ -16,10 +16,6 @@ const REGISTRY_ID = MNEMO_TESTNET.REGISTRY_ID;
 const CLOCK_ID = MNEMO_TESTNET.CLOCK_ID; // 0x6
 const NETWORK = "testnet" as const;
 
-// Dev-only: identifies the user to the backend so /sponsor can look up
-// sui_address and validate that `sender` matches. In production this comes
-// from the authenticated session (JWT). One place to change later.
-const CURRENT_USER_ID = DEV_TEST_USER.user_id;
 
 // Optional demo override: point the UI at a specific known account object.
 // MUST be owned by the signed-in address or the tx will abort with ENotOwner.
@@ -165,7 +161,7 @@ export async function executeSponsored(
   let sponsored: { bytes: string; digest: string };
   try {
     sponsored = await sponsorTransaction(
-      CURRENT_USER_ID,
+      sender,
       toBase64(txKindBytes),
       sender,
       allowedMoveCallTargets,
@@ -196,7 +192,7 @@ export async function executeSponsored(
   // 4. Hand the signed bytes back to the backend to submit via Enoki.
   let digest: string;
   try {
-    ({ digest } = await executeSponsoredApi(CURRENT_USER_ID, sponsored.digest, signature));
+    ({ digest } = await executeSponsoredApi(sender, sponsored.digest, signature));
   } catch (e) {
     console.error("[inheritance] /sponsor/execute failed:", e);
     throw new InheritanceError(`The sponsored transaction failed on execution: ${errMsg(e)}.`);
