@@ -1,3 +1,14 @@
+"""Provider API keys (bring-your-own-key).
+
+POST /keys stores the user's own provider key so the proxy can bill that user's
+own account instead of a shared dev key. The key is stored in `key_material`.
+
+SECURITY (testnet beta): key_material currently holds the key as provided.
+This is acceptable for a closed beta among known testers. Before opening wider
+or going to mainnet, replace this with Seal-encrypted storage (Use #2) so the
+server never holds plaintext keys. The list/return paths NEVER echo the key
+back — only metadata (provider, a masked hint, created_at).
+"""
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import text
@@ -10,8 +21,16 @@ router = APIRouter(prefix="/keys", tags=["keys"])
 
 class SaveKey(BaseModel):
     provider: str
-    walrus_blob_id: str
-    seal_policy_id: str
+    key: str  # the user's real provider API key (plaintext over local/TLS)
+
+
+def _mask(key: str) -> str:
+    """A safe hint to show in the UI without revealing the key."""
+    if not key:
+        return ""
+    if len(key) <= 8:
+        return "•" * len(key)
+    return f"{key[:4]}…{key[-4:]}"
 
 
 @router.get("")
@@ -20,18 +39,19 @@ async def list_keys(user: CurrentUser = Depends(require_user)):
         rows = (await s.execute(
             text(
                 """
-                SELECT id, provider, walrus_blob_id, seal_policy_id, created_at
+                SELECT id, provider, key_material, created_at
                   FROM provider_keys WHERE user_id = :uid
                 """
             ),
             {"uid": user.id},
         )).all()
+    # NEVER return key_material itself — only a masked hint.
     return [
         {
             "id": str(r.id),
             "provider": r.provider,
-            "walrus_blob_id": r.walrus_blob_id,
-            "seal_policy_id": r.seal_policy_id,
+            "key_hint": _mask(r.key_material or ""),
+            "has_key": bool(r.key_material),
             "created_at": r.created_at.isoformat(),
         }
         for r in rows
@@ -42,28 +62,30 @@ async def list_keys(user: CurrentUser = Depends(require_user)):
 async def save_key(body: SaveKey, user: CurrentUser = Depends(require_user)):
     if body.provider not in ("openai", "anthropic"):
         raise HTTPException(status_code=400, detail="provider must be openai or anthropic")
+    if not body.key or not body.key.strip():
+        raise HTTPException(status_code=400, detail="key is required")
 
+    key = body.key.strip()
     async with session() as s:
         row = (await s.execute(
             text(
                 """
-                INSERT INTO provider_keys (user_id, provider, walrus_blob_id, seal_policy_id)
-                VALUES (:uid, :p, :bid, :sid)
+                INSERT INTO provider_keys (user_id, provider, key_material)
+                VALUES (:uid, :p, :k)
                 ON CONFLICT (user_id, provider)
-                DO UPDATE SET walrus_blob_id = EXCLUDED.walrus_blob_id,
-                              seal_policy_id = EXCLUDED.seal_policy_id
-                RETURNING id, provider, walrus_blob_id, seal_policy_id, created_at
+                DO UPDATE SET key_material = EXCLUDED.key_material
+                RETURNING id, provider, key_material, created_at
                 """
             ),
-            {"uid": user.id, "p": body.provider, "bid": body.walrus_blob_id, "sid": body.seal_policy_id},
+            {"uid": user.id, "p": body.provider, "k": key},
         )).first()
         await s.commit()
 
     return {
         "id": str(row.id),
         "provider": row.provider,
-        "walrus_blob_id": row.walrus_blob_id,
-        "seal_policy_id": row.seal_policy_id,
+        "key_hint": _mask(row.key_material or ""),
+        "has_key": True,
         "created_at": row.created_at.isoformat(),
     }
 
