@@ -119,10 +119,13 @@ export async function getMemories(
   suiAddress?: string,
 ): Promise<{ results: Memory[]; total: number }> {
   const params = new URLSearchParams({
-    namespace_id: namespaceId,
     limit: String(limit),
     offset: String(offset),
   });
+  // namespace_id is optional; never send the string "null"/"undefined".
+  if (namespaceId && namespaceId !== "null" && namespaceId !== "undefined") {
+    params.set("namespace_id", namespaceId);
+  }
   if (sourceApp) params.set("source_app", sourceApp);
 
   const res = await fetch(`${API_BASE}/memories?${params}`, {

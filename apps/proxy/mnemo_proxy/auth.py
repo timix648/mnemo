@@ -42,16 +42,16 @@ async def authenticate(user_id: str, bearer: Optional[str]) -> Optional[AuthedUs
         row = await s.execute(
             text(
                 """
-                SELECT u.id, u.sui_address, u.proxy_token,
-                       n.id   AS default_namespace_id,
-                       n.name AS default_namespace_label
+SELECT u.id, u.sui_address, u.proxy_token,
+                       n.id            AS default_namespace_id,
+                       n.sui_object_id AS default_namespace_label
                   FROM users u
-                  LEFT JOIN LATERAL (
-                       SELECT id, name FROM namespaces
-                        WHERE user_id = u.id
-                        ORDER BY is_default DESC, created_at ASC
-                        LIMIT 1
-                  ) n ON TRUE
+                LEFT JOIN LATERAL (
+                   SELECT id, sui_object_id FROM namespaces
+                    WHERE user_id = u.id
+                    ORDER BY is_default DESC, created_at ASC
+                    LIMIT 1
+              ) n ON TRUE
                  WHERE u.id = :uid
                 """
             ),
