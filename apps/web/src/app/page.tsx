@@ -1,17 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useEnokiFlow, useZkLogin } from "@mysten/enoki/react";
 import { Button } from "@/components/ui/button";
 import {
   Brain, Shield, GitFork, Loader2, AlertTriangle,
   KeyRound, Search, Heart, ChevronDown,
 } from "lucide-react";
-import { useEnokiFlow } from "@mysten/enoki/react";
 
 export default function LandingPage() {
   const flow = useEnokiFlow();
+  const router = useRouter();
+  const { address } = useZkLogin();
   const [signingIn, setSigningIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // If already signed in (refresh, return visit), skip the landing and go
+  // straight to the app. The Enoki SDK restores the zkLogin session from
+  // localStorage on mount, so `address` populates within the first render
+  // cycles when a session exists.
+  useEffect(() => {
+    if (address) {
+      router.replace("/search");
+    }
+  }, [address, router]);
 
   async function handleGoogleSignIn() {
     setError(null);
@@ -40,7 +53,6 @@ export default function LandingPage() {
     } catch (err) {
       console.error("Sign in failed:", err);
       const msg = err instanceof Error ? err.message : String(err);
-      // Decode the two most common Enoki errors into actionable language.
       if (msg.includes("401")) {
         setError(
           "Enoki rejected the sign-in (401). Likely cause: in the Enoki Portal, the Google auth provider isn't configured for this app, or the Client ID there doesn't match NEXT_PUBLIC_GOOGLE_CLIENT_ID. See the setup guide.",
@@ -89,7 +101,7 @@ export default function LandingPage() {
         <p className="text-muted-foreground text-lg max-w-xl">
           Mnemo captures every AI conversation you have — across Cursor, Claude,
           ChatGPT, and more — encrypts it, and makes it searchable. Forever.
-          Across every model you'll ever use.
+          Across every model you&apos;ll ever use.
         </p>
 
         {error && (
@@ -150,7 +162,7 @@ export default function LandingPage() {
           </div>
           <h3 className="font-semibold text-lg">Inherit your AI past</h3>
           <p className="text-muted-foreground text-sm">
-            Configure a dead-man's switch. After 90 days of silence, your
+            Configure a dead-man&apos;s switch. After 90 days of silence, your
             designated recipient gains access. Your AI memory outlives you.
           </p>
         </div>

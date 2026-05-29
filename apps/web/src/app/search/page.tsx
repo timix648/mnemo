@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { searchMemories, type SearchResult } from "@/lib/api";
 import { useMnemoIdentity } from "@/lib/useMnemoIdentity";
+import { LogoutButton } from "@/components/LogoutButton";
 
 const APP_COLORS: Record<string, string> = {
   cursor: "bg-blue-100 text-blue-700",
@@ -119,7 +120,7 @@ export default function SearchPage() {
         </Link>
         <div className="flex gap-2">
           <Link href="/chats"><Button variant="ghost" size="sm">My Memory</Button></Link>
-          <Link href="/settings"><Button variant="ghost" size="sm">Settings</Button></Link>
+          <Link href="/settings"><Button variant="ghost" size="sm">Settings</Button></Link><LogoutButton />
         </div>
       </nav>
 

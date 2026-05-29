@@ -20,6 +20,11 @@ import {
   InheritanceError,
   type InheritanceState,
 } from "@/lib/inheritance";
+import { LogoutButton } from "@/components/LogoutButton";
+import { ProxySetupCard } from "@/components/ProxySetupCard";
+
+
+
 
 const API_BASE = "http://127.0.0.1:8001";
 
@@ -224,7 +229,7 @@ export default function SettingsPage() {
         </Link>
         <div className="flex gap-2">
           <Link href="/chats"><Button variant="ghost" size="sm">My Memory</Button></Link>
-          <Link href="/search"><Button variant="ghost" size="sm">Search</Button></Link>
+          <Link href="/search"><Button variant="ghost" size="sm">Search</Button></Link><LogoutButton />
         </div>
       </nav>
 
@@ -236,6 +241,9 @@ export default function SettingsPage() {
             Manage your API keys, inheritance, and account.
           </p>
         </div>
+
+         {/* Proxy setup — shows user their proxy URL + token */}
+        <ProxySetupCard address={address} />
 
         {/* API Keys */}
         <section className="flex flex-col gap-4">

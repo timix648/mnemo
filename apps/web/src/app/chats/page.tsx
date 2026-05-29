@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { getMemories, deleteMemory, searchMemories, type Memory } from "@/lib/api";
 import { useMnemoIdentity } from "@/lib/useMnemoIdentity";
+import { LogoutButton } from "@/components/LogoutButton";
 
 const APP_FILTERS = ["All", "Cursor", "Bolt_AI", "TypingMind", "Other"];
 
@@ -165,7 +166,7 @@ export default function ChatsPage() {
         </Link>
         <div className="flex gap-2">
           <Link href="/search"><Button variant="ghost" size="sm">Search</Button></Link>
-          <Link href="/settings"><Button variant="ghost" size="sm">Settings</Button></Link>
+          <Link href="/settings"><Button variant="ghost" size="sm">Settings</Button></Link><LogoutButton />
         </div>
       </nav>
 
