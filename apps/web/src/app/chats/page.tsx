@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { getMemories, deleteMemory, searchMemories, type Memory } from "@/lib/api";
-import { DEV_TEST_USER } from "@/config/sui";
+import { useMnemoIdentity } from "@/lib/useMnemoIdentity";
 
 const APP_FILTERS = ["All", "Cursor", "Bolt_AI", "TypingMind", "Other"];
 
@@ -56,6 +56,8 @@ function parseTurns(text: string): { role: string; content: string }[] {
 }
 
 export default function ChatsPage() {
+  const { address, namespaceId } = useMnemoIdentity();
+
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("All");
   const [chats, setChats] = useState<ChatItem[]>([]);
@@ -71,7 +73,9 @@ export default function ChatsPage() {
   const [detailError, setDetailError] = useState(false);
 
   useEffect(() => {
-    getMemories(DEV_TEST_USER.user_id, DEV_TEST_USER.default_namespace_id)
+    if (!address) return;
+    setLoading(true);
+    getMemories(address, namespaceId)
       .then((data) => {
         const mapped = (data.results ?? []).map((m: Memory) => ({
           id: m.id,
@@ -85,7 +89,7 @@ export default function ChatsPage() {
       })
       .catch(() => setBackendError(true))
       .finally(() => setLoading(false));
-  }, []);
+  }, [address, namespaceId]);
 
   // Close modal on Escape
   useEffect(() => {
@@ -102,14 +106,13 @@ export default function ChatsPage() {
     setDetailError(false);
     setDetailLoading(true);
     try {
+      if (!address || !namespaceId) {
+        setDetailError(true);
+        return;
+      }
       // No GET /memories/{id} yet — use semantic search with the preview as the
       // query and match the row back by id (fallback to top hit).
-      const data = await searchMemories(
-        DEV_TEST_USER.user_id,
-        DEV_TEST_USER.default_namespace_id,
-        chat.preview,
-        5,
-      );
+      const data = await searchMemories(address, namespaceId, chat.preview, 5);
       const hit =
         data.results.find((r) => r.id === chat.id) ?? data.results[0] ?? null;
       if (hit?.text) setFullText(hit.text);
@@ -130,9 +133,10 @@ export default function ChatsPage() {
   async function handleDelete(id: string, e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
+    if (!address) return;
     setDeletingId(id);
     try {
-      await deleteMemory(DEV_TEST_USER.user_id, id);
+      await deleteMemory(address, id);
       setChats((prev) => prev.filter((c) => c.id !== id));
       setTotal((prev) => prev - 1);
     } catch {

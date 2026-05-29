@@ -11,8 +11,8 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { useSuiClient } from "@mysten/dapp-kit";
-import { useEnokiFlow, useZkLogin } from "@mysten/enoki/react";
-import { DEV_TEST_USER } from "@/config/sui";
+import { useEnokiFlow } from "@mysten/enoki/react";
+import { useMnemoIdentity } from "@/lib/useMnemoIdentity";
 import {
   saveInheritance,
   sendHeartbeat,
@@ -50,7 +50,8 @@ export default function SettingsPage() {
   // dapp-kit / Enoki — the user signs & Mnemo sponsors gas via these.
   const suiClient = useSuiClient();
   const flow = useEnokiFlow();
-  const { address } = useZkLogin();
+  // Identity: the signed-in zkLogin address + the user's default namespace.
+  const { address, namespaceId } = useMnemoIdentity();
 
   const [keys, setKeys] = useState<ProviderKey[]>([]);
   const [keysLoading, setKeysLoading] = useState(true);
@@ -66,9 +67,11 @@ export default function SettingsPage() {
   const [inheritanceTx, setInheritanceTx] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
+  // Load the user's stored provider keys once the address resolves.
   useEffect(() => {
-    fetchKeys();
-  }, []);
+    if (address) fetchKeys();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [address]);
 
   // Pull the real on-chain inheritance config once the address resolves, so the
   // form reflects what's actually set rather than blank defaults.
@@ -94,9 +97,10 @@ export default function SettingsPage() {
   }, [address, suiClient]);
 
   async function fetchKeys() {
+    if (!address) return;
     try {
       const res = await fetch(`${API_BASE}/keys`, {
-        headers: { "X-Dev-User": DEV_TEST_USER.user_id },
+        headers: { "X-Sui-Address": address },
       });
       if (!res.ok) throw new Error("failed");
       const data = await res.json();
@@ -109,11 +113,12 @@ export default function SettingsPage() {
   }
 
   async function revokeKey(provider: string) {
+    if (!address) return;
     setRevoking(provider);
     try {
       const res = await fetch(`${API_BASE}/keys/${provider}`, {
         method: "DELETE",
-        headers: { "X-Dev-User": DEV_TEST_USER.user_id },
+        headers: { "X-Sui-Address": address },
       });
       if (!res.ok) throw new Error("failed");
       setKeys((prev) => prev.filter((k) => k.provider !== provider));
@@ -182,11 +187,13 @@ export default function SettingsPage() {
   }
 
   async function handleExport() {
+    if (!address) return;
     setExporting(true);
     try {
+      const nsParam = namespaceId ? `namespace_id=${namespaceId}&` : "";
       const res = await fetch(
-        `${API_BASE}/memories?namespace_id=${DEV_TEST_USER.default_namespace_id}&limit=100&offset=0`,
-        { headers: { "X-Dev-User": DEV_TEST_USER.user_id } }
+        `${API_BASE}/memories?${nsParam}limit=100&offset=0`,
+        { headers: { "X-Sui-Address": address } }
       );
       if (!res.ok) throw new Error("failed");
       const data = await res.json();

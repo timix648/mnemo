@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getMe, type MeResponse } from "@/lib/api";
-import { DEV_TEST_USER } from "@/config/sui";
 import { useEnokiFlow, useZkLogin } from "@mysten/enoki/react";
 import { useSuiClient } from "@mysten/dapp-kit";
 import { ensureAccount, lookupAccountId, InheritanceError } from "@/lib/inheritance";
@@ -48,12 +47,22 @@ export default function OnboardPage() {
       sessionStorage.setItem("mnemo_authed", "true");
       setStep(1);
     }
+  }, []);
 
-    getMe(DEV_TEST_USER.user_id)
+  // Fetch identity + proxy details once the signed-in address resolves. This is
+  // also the first authenticated call, so it auto-provisions the user + default
+  // namespace on the backend.
+  useEffect(() => {
+    if (!address) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    getMe(address)
       .then(setMe)
       .catch(() => setError("Could not reach backend. Showing placeholder data."))
       .finally(() => setLoading(false));
-  }, []);
+  }, [address]);
 
   // Once we know the signed-in address, create the on-chain account if it
   // doesn't exist yet. This is the step that was missing — without it there's
@@ -131,12 +140,14 @@ export default function OnboardPage() {
   async function handleSaveKey() {
     const key = apiKey.trim();
     if (!key) return;
+    if (!address) {
+      setSaveError("Sign in with Google before saving your key.");
+      return;
+    }
     setSaving(true);
     setSaveError(null);
 
-    const identityHeaders = address
-      ? { "X-Sui-Address": address }
-      : { "X-Dev-User": DEV_TEST_USER.user_id };
+    const identityHeaders = { "X-Sui-Address": address };
 
     try {
       // 1. Verify the key actually works with the provider BEFORE storing it.
