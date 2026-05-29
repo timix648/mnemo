@@ -42,7 +42,7 @@ async def search(body: SearchRequest, user: CurrentUser = Depends(require_user))
     if not ns:
         raise HTTPException(status_code=404, detail="namespace not found")
 
-    namespace_label = ns.sui_object_id or "default"
+    namespace_label = ns.name or ns.sui_object_id or "default"
 
     # 2. Ask the relayer (via the sidecar) for semantic matches + decrypted text.
     try:
