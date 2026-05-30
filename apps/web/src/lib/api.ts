@@ -36,6 +36,20 @@ export interface Memory {
   ts: string;
 }
 
+export interface MemoryDetail {
+  id: string;
+  namespace_id: string;
+  walrus_blob_id: string;
+  text: string;
+  model: string;
+  preview: string;
+  token_input: number;
+  token_output: number;
+  source_app: string | null;
+  source_app_raw: string | null;
+  ts: string;
+}
+
 export interface SponsorResponse {
   bytes: string;
   digest: string;
@@ -132,6 +146,34 @@ export async function getMemories(
     headers: authHeaders(userId, suiAddress),
   });
   if (!res.ok) throw new Error(`/memories failed: ${res.status}`);
+  return res.json();
+}
+
+/**
+ * Fetch one captured memory's full decrypted text by id.
+ *
+ * Deterministic by-id lookup via the API's GET /memories/{id}, which goes
+ * through the sidecar -> relayer's engine.fetch_one primitive (cache ->
+ * Walrus -> Seal-decrypt). Unlike searchMemories, this is NOT a semantic
+ * search — it reliably loads a specific conversation even when the preview
+ * text wouldn't rank itself highly. Used by the chats page when you click
+ * a chat to read the full conversation.
+ *
+ * Throws on 404 (memory missing, blob unavailable, or owned by another
+ * user) and other failures. The chats page catches and shows its
+ * "couldn't load" state.
+ */
+export async function getMemoryById(
+  memoryId: string,
+  suiAddress?: string,
+  userId?: string,
+): Promise<MemoryDetail> {
+  const res = await fetch(`${API_BASE}/memories/${memoryId}`, {
+    headers: authHeaders(userId ?? "", suiAddress),
+  });
+  if (!res.ok) {
+    throw new Error(`/memories/${memoryId} failed: ${res.status}`);
+  }
   return res.json();
 }
 

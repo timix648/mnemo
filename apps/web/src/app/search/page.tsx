@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Brain, Search, Plus, Copy, Check, X, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
-import { searchMemories, type SearchResult } from "@/lib/api";
+import { searchMemories, getMemoryById, type SearchResult } from "@/lib/api";
 import { useMnemoIdentity } from "@/lib/useMnemoIdentity";
 import { LogoutButton } from "@/components/LogoutButton";
 
@@ -30,6 +30,14 @@ function formatDate(ts: string) {
   });
 }
 
+// Single source of truth for identifying a result/context item. MUST be used
+// everywhere (add, remove, dedupe, React key) so add and remove agree —
+// mixing id-or-blob in one place and blob-only in another silently breaks
+// removal (the keys never match).
+function keyOf(r: { id: string | null; walrus_blob_id: string }): string {
+  return r.id ?? r.walrus_blob_id;
+}
+
 function ScoreBadge({ score }: { score: number }) {
   const pct = Math.round(score * 100);
   const color =
@@ -43,6 +51,21 @@ function ScoreBadge({ score }: { score: number }) {
   );
 }
 
+// Split a captured "user: ...\nassistant: ..." blob into turns for display.
+function parseTurns(text: string): { role: string; content: string }[] {
+  const re = /^(user|assistant|system):\s?/gim;
+  const matches = [...text.matchAll(re)];
+  if (matches.length === 0) return [{ role: "exchange", content: text }];
+  const turns: { role: string; content: string }[] = [];
+  for (let i = 0; i < matches.length; i++) {
+    const role = matches[i][1].toLowerCase();
+    const start = matches[i].index! + matches[i][0].length;
+    const end = i + 1 < matches.length ? matches[i + 1].index! : text.length;
+    turns.push({ role, content: text.slice(start, end).trim() });
+  }
+  return turns;
+}
+
 export default function SearchPage() {
   const { address, namespaceId, ready } = useMnemoIdentity();
 
@@ -54,10 +77,15 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Full-conversation modal state
+  const [openResult, setOpenResult] = useState<SearchResult | null>(null);
+  const [fullText, setFullText] = useState<string | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState(false);
+
   async function handleSearch() {
     if (!query.trim()) return;
 
-    // Identity must be resolved before we can scope the search to this user.
     if (!address) {
       setError("Sign in to search your memory.");
       setHasSearched(true);
@@ -87,14 +115,19 @@ export default function SearchPage() {
     }
   }
 
-  function addToContext(result: SearchResult) {
-    if (!context.find((c) => (c.id ?? c.walrus_blob_id) === (result.id ?? result.walrus_blob_id))) {
-      setContext((prev) => [...prev, result]);
-    }
+  const inContext = (r: SearchResult) =>
+    context.some((c) => keyOf(c) === keyOf(r));
+
+  function toggleContext(result: SearchResult) {
+    setContext((prev) =>
+      prev.some((c) => keyOf(c) === keyOf(result))
+        ? prev.filter((c) => keyOf(c) !== keyOf(result))   // already in → remove
+        : [...prev, result],                                // not in → add
+    );
   }
 
-  function removeFromContext(blobId: string) {
-    setContext((prev) => prev.filter((c) => (c.id ?? c.walrus_blob_id) !== blobId));
+  function removeFromContext(key: string) {
+    setContext((prev) => prev.filter((c) => keyOf(c) !== key));
   }
 
   function handleCopyContext() {
@@ -108,6 +141,49 @@ export default function SearchPage() {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
+
+  // Open the full-conversation modal. The search result already carries the
+  // decrypted `text` from the relayer, so we can show it immediately. If for
+  // some reason it's missing, fall back to fetching by id.
+  async function viewFull(result: SearchResult) {
+    setOpenResult(result);
+    setDetailError(false);
+    if (result.text && result.text.trim()) {
+      setFullText(result.text);
+      return;
+    }
+    if (!result.id || !address) {
+      setDetailError(true);
+      setFullText(null);
+      return;
+    }
+    setDetailLoading(true);
+    setFullText(null);
+    try {
+      const detail = await getMemoryById(result.id, address);
+      if (detail?.text) setFullText(detail.text);
+      else setDetailError(true);
+    } catch {
+      setDetailError(true);
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
+  function closeModal() {
+    setOpenResult(null);
+    setFullText(null);
+    setDetailError(false);
+  }
+
+  // Close modal on Escape
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") closeModal();
+    }
+    if (openResult) window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [openResult]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -188,7 +264,7 @@ export default function SearchPage() {
                 </div>
               ) : (
                 results.map((r) => (
-                  <div key={r.id ?? r.walrus_blob_id} className="rounded-xl border bg-card p-5 flex flex-col gap-3">
+                  <div key={keyOf(r)} className="rounded-xl border bg-card p-5 flex flex-col gap-3">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${APP_COLORS[(r.source_app || "unknown").toLowerCase()] ?? APP_COLORS["unknown"]}`}>
                         From {(r.source_app || "Unknown").replace("_", " ")}
@@ -210,11 +286,15 @@ export default function SearchPage() {
                     <div className="flex gap-2 mt-1">
                       <Button
                         size="sm"
-                        onClick={() => addToContext(r)}
-                        disabled={!!context.find((c) => (c.id ?? c.walrus_blob_id) === (r.id ?? r.walrus_blob_id))}
+                        variant={inContext(r) ? "secondary" : "default"}
+                        onClick={() => toggleContext(r)}
                       >
-                        <Plus className="w-3 h-3 mr-1" />
-                        {context.find((c) => (c.id ?? c.walrus_blob_id) === (r.id ?? r.walrus_blob_id)) ? "Added" : "Add to context"}
+                        {inContext(r)
+                          ? <><Check className="w-3 h-3 mr-1" />Added (click to remove)</>
+                          : <><Plus className="w-3 h-3 mr-1" />Add to context</>}
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => viewFull(r)}>
+                        View full
                       </Button>
                     </div>
                   </div>
@@ -236,10 +316,10 @@ export default function SearchPage() {
 
             <div className="flex flex-col gap-2 flex-1">
               {context.map((c) => (
-                <div key={c.walrus_blob_id} className="rounded-lg border bg-card p-3 flex flex-col gap-1.5">
+                <div key={keyOf(c)} className="rounded-lg border bg-card p-3 flex flex-col gap-1.5">
                   <div className="flex items-center justify-between">
                     <Badge variant="outline" className="text-xs">{c.model}</Badge>
-                    <button onClick={() => removeFromContext(c.walrus_blob_id)}>
+                    <button onClick={() => removeFromContext(keyOf(c))} aria-label="Remove">
                       <X className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
                     </button>
                   </div>
@@ -257,6 +337,85 @@ export default function SearchPage() {
           </div>
         )}
       </div>
+
+      {/* Full-conversation modal */}
+      {openResult && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={closeModal}
+        >
+          <div
+            className="bg-background rounded-2xl border shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 px-5 sm:px-6 py-4 border-b">
+              <div className="flex flex-col gap-2 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${APP_COLORS[(openResult.source_app || "unknown").toLowerCase()] ?? APP_COLORS["unknown"]}`}>
+                    From {(openResult.source_app || "Unknown").replace("_", " ")}
+                  </span>
+                  <Badge variant="outline" className="text-xs">{openResult.model}</Badge>
+                  <ScoreBadge score={openResult.score} />
+                </div>
+                <span className="text-xs text-muted-foreground">{formatDate(openResult.ts)}</span>
+              </div>
+              <button
+                onClick={closeModal}
+                className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto px-5 sm:px-6 py-5 flex flex-col gap-4">
+              {detailLoading ? (
+                <div className="flex items-center gap-2 text-muted-foreground text-sm py-8 justify-center">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Decrypting conversation...
+                </div>
+              ) : detailError ? (
+                <div className="rounded-lg bg-yellow-50 border border-yellow-200 px-4 py-3 text-sm text-yellow-800">
+                  Couldn&apos;t load the full conversation. Showing the preview instead:
+                  <p className="mt-2 text-foreground">{openResult.preview}</p>
+                </div>
+              ) : fullText ? (
+                parseTurns(fullText).map((turn, i) => (
+                  <div key={i} className="flex flex-col gap-1">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      {turn.role}
+                    </p>
+                    <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                      {turn.content}
+                    </p>
+                  </div>
+                ))
+              ) : null}
+            </div>
+
+            <div className="flex justify-end gap-2 px-5 sm:px-6 py-4 border-t">
+              <Button
+                size="sm"
+                variant={inContext(openResult) ? "secondary" : "default"}
+                onClick={() => toggleContext(openResult)}
+              >
+                {inContext(openResult)
+                  ? <><Check className="w-4 h-4 mr-2" />Added</>
+                  : <><Plus className="w-4 h-4 mr-2" />Add to context</>}
+              </Button>
+              {fullText && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => navigator.clipboard.writeText(fullText)}
+                >
+                  Copy text
+                </Button>
+              )}
+              <Button size="sm" variant="ghost" onClick={closeModal}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { getMemories, deleteMemory, searchMemories, type Memory } from "@/lib/api";
+import { getMemories, deleteMemory, getMemoryById, type Memory } from "@/lib/api";
 import { useMnemoIdentity } from "@/lib/useMnemoIdentity";
 import { LogoutButton } from "@/components/LogoutButton";
 
@@ -107,16 +107,15 @@ export default function ChatsPage() {
     setDetailError(false);
     setDetailLoading(true);
     try {
-      if (!address || !namespaceId) {
+      if (!address) {
         setDetailError(true);
         return;
       }
-      // No GET /memories/{id} yet — use semantic search with the preview as the
-      // query and match the row back by id (fallback to top hit).
-      const data = await searchMemories(address, namespaceId, chat.preview, 5);
-      const hit =
-        data.results.find((r) => r.id === chat.id) ?? data.results[0] ?? null;
-      if (hit?.text) setFullText(hit.text);
+      // Deterministic by-id fetch via GET /memories/{id}, which goes through
+      // the sidecar -> relayer's engine.fetch_one (cache -> Walrus -> Seal).
+      // Replaces the old search-and-match workaround.
+      const detail = await getMemoryById(chat.id, address);
+      if (detail?.text) setFullText(detail.text);
       else setDetailError(true);
     } catch {
       setDetailError(true);

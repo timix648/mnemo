@@ -1,19 +1,23 @@
 """List captured memories (paginated) for the chat-browser UI.
 
-This is the "list" companion to /search. Unlike /search, this does NOT call
-the relayer or decrypt anything — it returns lightweight metadata rows from
-the local `entries` table, which the worker populated when each conversation
-was captured. The frontend uses this to render the chats page (a list of
-prior conversations); clicking one can then fetch the decrypted text via
-/search or a dedicated /memories/{id} endpoint (future).
+Three routes:
+- GET  /memories         — paginated list, metadata only, no decryption.
+- GET  /memories/{id}    — fetch one memory's full decrypted text. Goes through
+                           the sidecar's /memwal/fetch which wraps the relayer's
+                           engine.fetch_one primitive (cache → Walrus → Seal
+                           decrypt). Deterministic — NOT a semantic search.
+- DELETE /memories/{id}  — soft delete (sets deleted_at on the metadata row).
+                           The encrypted blob stays on Walrus + in the relayer.
 """
 from typing import Optional
 from uuid import UUID
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 
 from mnemo_api.auth import CurrentUser, require_user
+from mnemo_api.config import settings
 from mnemo_api.db import session
 
 router = APIRouter(prefix="/memories", tags=["memories"])
@@ -101,6 +105,100 @@ async def list_memories(
         "total": total,
         "limit": limit,
         "offset": offset,
+    }
+
+
+@router.get("/{memory_id}")
+async def get_memory(
+    memory_id: UUID,
+    user: CurrentUser = Depends(require_user),
+):
+    """Fetch one captured memory's FULL decrypted text by id.
+
+    Deterministic: looks up the entry row (Postgres metadata), then asks the
+    sidecar to fetch + decrypt the blob from Walrus via the relayer's
+    engine.fetch_one primitive. Does NOT run a vector search — this is a
+    direct by-id lookup so the chats UI can reliably load a specific
+    conversation without depending on semantic match quality.
+
+    Ownership is enforced by the WHERE clause (user_id = :uid). Returns
+    404 if the memory doesn't exist, belongs to a different user, has been
+    soft-deleted, or the blob is no longer retrievable (Walrus 404 / Seal
+    decrypt failure / UTF-8 error — the relayer's engine returns Ok(None)
+    in all those cases and the sidecar surfaces it as a 404).
+
+    Namespace label resolution mirrors what the capture worker sends to the
+    relayer, so the fetch lands in the same partition the capture wrote to:
+        sui_object_id  →  name  →  "default"
+    (The relayer's vector_entries column shows real captures live under
+    sui_object_id when set — that's the source of truth.)
+    """
+    # 1. Look up the entry. The WHERE clause enforces ownership +
+    #    not-soft-deleted, so a malformed/foreign id falls through to 404.
+    async with session() as s:
+        row = (await s.execute(
+            text(
+                """
+                SELECT e.id, e.namespace_id, e.walrus_blob_id, e.model,
+                       e.preview, e.token_input, e.token_output,
+                       e.source_app, e.source_app_raw, e.ts,
+                       n.name AS namespace_name, n.sui_object_id
+                  FROM entries e
+                  JOIN namespaces n ON n.id = e.namespace_id
+                 WHERE e.id = :mid
+                   AND e.user_id = :uid
+                   AND e.deleted_at IS NULL
+                """
+            ),
+            {"mid": memory_id, "uid": user.id},
+        )).first()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="memory not found")
+
+    # Match the relayer's actual stored partition: sui_object_id first
+    # (that's what the index has for current captures), name as fallback,
+    # "default" last-ditch.
+    namespace_label = row.sui_object_id or row.namespace_name or "default"
+
+    # 2. Ask the sidecar to fetch + decrypt the blob.
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                f"{settings.sidecar_url}/memwal/fetch",
+                json={
+                    "ownerAddress": user.sui_address,
+                    "namespaceObjectId": namespace_label,
+                    "walrusBlobId": row.walrus_blob_id,
+                },
+            )
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"sidecar unreachable: {e}")
+
+    if resp.status_code == 404:
+        # Metadata exists but the blob isn't retrievable. Surfaces as 404
+        # so the frontend can show its "couldn't load" state cleanly.
+        raise HTTPException(status_code=404, detail="memory text unavailable")
+    if resp.status_code >= 400:
+        raise HTTPException(
+            status_code=502,
+            detail=f"fetch failed: {resp.status_code} {resp.text[:300]}",
+        )
+
+    payload = resp.json()
+
+    return {
+        "id": str(row.id),
+        "namespace_id": str(row.namespace_id),
+        "walrus_blob_id": row.walrus_blob_id,
+        "text": payload.get("text"),
+        "model": row.model,
+        "preview": row.preview,
+        "token_input": row.token_input,
+        "token_output": row.token_output,
+        "source_app": row.source_app,
+        "source_app_raw": row.source_app_raw,
+        "ts": row.ts.isoformat() if row.ts else None,
     }
 
 

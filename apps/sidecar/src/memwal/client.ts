@@ -59,8 +59,15 @@ function delegate(): { kp: Ed25519Keypair; pubHex: string } {
 
 /**
  * Signed request to the relayer. Mirrors test-relayer-roundtrip.ts exactly.
+ * Returns { ok, status, body } so callers can branch on status (e.g. 404)
+ * without losing access to the response. Existing callers that want the
+ * old throw-on-non-2xx behaviour wrap this in signedFetch().
  */
-async function signedFetch(method: string, path: string, body?: unknown): Promise<any> {
+async function signedFetchRaw(
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<{ ok: boolean; status: number; bodyText: string }> {
   const { kp, pubHex } = delegate();
   const bodyStr = body === undefined ? "" : JSON.stringify(body);
   const bodySha = createHash("sha256").update(bodyStr).digest("hex");
@@ -85,11 +92,21 @@ async function signedFetch(method: string, path: string, body?: unknown): Promis
     headers,
     body: method === "GET" ? undefined : bodyStr,
   });
-  const respText = await res.text();
-  if (!res.ok) {
-    throw new Error(`${method} ${path} → ${res.status}: ${respText}`);
+  const bodyText = await res.text();
+  return { ok: res.ok, status: res.status, bodyText };
+}
+
+/**
+ * Throwing wrapper around signedFetchRaw — preserves the original
+ * signedFetch contract (parse JSON, throw on non-2xx) for callers that
+ * don't need status-aware branching.
+ */
+async function signedFetch(method: string, path: string, body?: unknown): Promise<any> {
+  const { ok, status, bodyText } = await signedFetchRaw(method, path, body);
+  if (!ok) {
+    throw new Error(`${method} ${path} → ${status}: ${bodyText}`);
   }
-  return respText ? JSON.parse(respText) : {};
+  return bodyText ? JSON.parse(bodyText) : {};
 }
 
 async function pollJob(jobId: string, timeoutMs = 90_000, intervalMs = 3_000): Promise<string> {
@@ -160,4 +177,47 @@ export async function recallMemories(input: {
   const results = resp.results ?? [];
   logger.info({ ns: namespace, count: results.length }, "memwal.recall");
   return results;
+}
+
+/**
+ * Deterministic fetch of one already-known memory by walrus_blob_id.
+ *
+ * Calls the relayer's /api/fetch route (new — wraps the engine's fetch_one
+ * primitive: cache → Walrus → Seal-decrypt → UTF-8). Unlike recall, this
+ * does NOT run a vector search; the caller already knows which blob it
+ * wants. Used by the API's GET /memories/{id} so the chats browser can
+ * reliably load a specific conversation without going through search.
+ *
+ * Returns:
+ *   - the decrypted text on success
+ *   - null when the relayer responds 404 (blob gone, decrypt failed, dropped)
+ * Throws on auth / network / unexpected failures.
+ */
+export async function fetchBlob(input: {
+  ownerAddress: string;
+  namespaceObjectId: string;
+  walrusBlobId: string;
+}): Promise<string | null> {
+  const namespace = input.namespaceObjectId || "default";
+  const path = "/api/fetch";
+  const { ok, status, bodyText } = await signedFetchRaw("POST", path, {
+    namespace,
+    blob_id: input.walrusBlobId,
+  });
+
+  if (status === 404) {
+    logger.info({ ns: namespace, blobId: input.walrusBlobId }, "memwal.fetch 404");
+    return null;
+  }
+  if (!ok) {
+    throw new Error(`POST ${path} → ${status}: ${bodyText}`);
+  }
+
+  const json = bodyText ? JSON.parse(bodyText) : {};
+  const text = json.text;
+  if (typeof text !== "string") {
+    throw new Error(`POST ${path} → 200 but missing text field: ${bodyText}`);
+  }
+  logger.info({ ns: namespace, blobId: input.walrusBlobId, bytes: text.length }, "memwal.fetch ok");
+  return text;
 }

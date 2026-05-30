@@ -27,10 +27,11 @@ class SearchRequest(BaseModel):
 
 @router.post("/search")
 async def search(body: SearchRequest, user: CurrentUser = Depends(require_user)):
-    # 1. Verify the namespace belongs to the user, and get its relayer label.
-    #    The relayer groups memories by an opaque string; we use the namespace
-    #    name (falling back to sui_object_id) as that label, matching what the
-    #    capture worker sends.
+# 1. Verify the namespace belongs to the user, and get its relayer label.
+    #    The relayer groups memories by an opaque string; we use sui_object_id
+    #    (what the relayer's vector_entries actually stores — see memories.py),
+    #    falling back to name then "default". MUST match the capture worker
+    #    and GET /memories/{id} or search returns empty for real captures.
     async with session() as s:
         ns = (await s.execute(
             text(
@@ -42,7 +43,7 @@ async def search(body: SearchRequest, user: CurrentUser = Depends(require_user))
     if not ns:
         raise HTTPException(status_code=404, detail="namespace not found")
 
-    namespace_label = ns.name or ns.sui_object_id or "default"
+    namespace_label = ns.sui_object_id or ns.name or "default"
 
     # 2. Ask the relayer (via the sidecar) for semantic matches + decrypted text.
     try:
