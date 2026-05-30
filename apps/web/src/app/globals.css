@@ -9,7 +9,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-heading: var(--font-heading);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -48,83 +48,111 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* ============================================================
+   MNEMO — deep-sea theme
+   Light = "sunlit shallows", Dark = "deep sea".
+   Primary = warm coral (the clownfish accent).
+   Only the VALUES below changed from the stock grayscale; the
+   @theme mapping above and the structure are untouched, so every
+   page that uses semantic tokens recolors automatically.
+   ============================================================ */
+
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --background: oklch(0.985 0.008 215);
+  --foreground: oklch(0.28 0.045 240);
+  --card: oklch(0.995 0.006 210);
+  --card-foreground: oklch(0.28 0.045 240);
+  --popover: oklch(0.995 0.006 210);
+  --popover-foreground: oklch(0.28 0.045 240);
+  --primary: oklch(0.70 0.165 45);
+  --primary-foreground: oklch(0.99 0.012 60);
+  --secondary: oklch(0.93 0.035 205);
+  --secondary-foreground: oklch(0.30 0.05 235);
+  --muted: oklch(0.945 0.02 210);
+  --muted-foreground: oklch(0.50 0.035 225);
+  --accent: oklch(0.90 0.06 195);
+  --accent-foreground: oklch(0.28 0.05 235);
+  --destructive: oklch(0.58 0.20 25);
+  --border: oklch(0.90 0.02 215);
+  --input: oklch(0.90 0.02 215);
+  --ring: oklch(0.70 0.13 45);
+  --chart-1: oklch(0.70 0.165 45);
+  --chart-2: oklch(0.72 0.11 195);
+  --chart-3: oklch(0.60 0.10 220);
+  --chart-4: oklch(0.48 0.08 235);
+  --chart-5: oklch(0.78 0.13 80);
+  --radius: 0.85rem;
+  --sidebar: oklch(0.97 0.012 215);
+  --sidebar-foreground: oklch(0.30 0.045 240);
+  --sidebar-primary: oklch(0.70 0.165 45);
+  --sidebar-primary-foreground: oklch(0.99 0.012 60);
+  --sidebar-accent: oklch(0.92 0.04 200);
+  --sidebar-accent-foreground: oklch(0.30 0.05 235);
+  --sidebar-border: oklch(0.90 0.02 215);
+  --sidebar-ring: oklch(0.70 0.13 45);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: oklch(0.19 0.035 240);
+  --foreground: oklch(0.95 0.012 210);
+  --card: oklch(0.23 0.04 238);
+  --card-foreground: oklch(0.95 0.012 210);
+  --popover: oklch(0.23 0.04 238);
+  --popover-foreground: oklch(0.95 0.012 210);
+  --primary: oklch(0.74 0.165 47);
+  --primary-foreground: oklch(0.20 0.04 240);
+  --secondary: oklch(0.30 0.045 230);
+  --secondary-foreground: oklch(0.95 0.012 210);
+  --muted: oklch(0.28 0.04 232);
+  --muted-foreground: oklch(0.72 0.03 215);
+  --accent: oklch(0.33 0.06 215);
+  --accent-foreground: oklch(0.95 0.012 210);
+  --destructive: oklch(0.70 0.18 22);
+  --border: oklch(0.95 0.02 210 / 12%);
+  --input: oklch(0.95 0.02 210 / 15%);
+  --ring: oklch(0.74 0.14 47);
+  --chart-1: oklch(0.74 0.165 47);
+  --chart-2: oklch(0.74 0.12 195);
+  --chart-3: oklch(0.66 0.11 220);
+  --chart-4: oklch(0.56 0.09 235);
+  --chart-5: oklch(0.80 0.14 80);
+  --sidebar: oklch(0.22 0.04 238);
+  --sidebar-foreground: oklch(0.95 0.012 210);
+  --sidebar-primary: oklch(0.74 0.165 47);
+  --sidebar-primary-foreground: oklch(0.20 0.04 240);
+  --sidebar-accent: oklch(0.32 0.05 220);
+  --sidebar-accent-foreground: oklch(0.95 0.012 210);
+  --sidebar-border: oklch(0.95 0.02 210 / 12%);
+  --sidebar-ring: oklch(0.74 0.14 47);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
-  body {
-    @apply bg-background text-foreground;
-  }
   html {
     @apply font-sans;
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background text-foreground;
+    min-height: 100dvh;
+    /* Subtle sunlight-through-water glow at the top. Theme-aware via
+       --accent, so it works in both light and dark. Purely decorative. */
+    background-image: radial-gradient(
+      1200px 600px at 50% -15%,
+      color-mix(in oklab, var(--accent) 35%, transparent),
+      transparent 70%
+    );
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+  }
+  /* Existing headings instantly pick up the display font — no page edits. */
+  h1, h2, h3, h4 {
+    @apply font-heading;
+    letter-spacing: -0.01em;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--primary) 30%, transparent);
   }
 }
