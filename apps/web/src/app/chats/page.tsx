@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -9,6 +10,7 @@ import Link from "next/link";
 import { getMemories, deleteMemory, getMemoryById, type Memory } from "@/lib/api";
 import { useMnemoIdentity } from "@/lib/useMnemoIdentity";
 import { LogoutButton } from "@/components/LogoutButton";
+import { ChatMessage } from "@/components/ChatMessage";
 
 const APP_FILTERS = ["All", "Cursor", "Bolt_AI", "TypingMind", "Other"];
 
@@ -57,7 +59,7 @@ function parseTurns(text: string): { role: string; content: string }[] {
 }
 
 export default function ChatsPage() {
-  const { address, namespaceId } = useMnemoIdentity();
+  const { address, namespaceId, displayName, avatarId } = useMnemoIdentity();
 
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("All");
@@ -335,14 +337,13 @@ export default function ChatsPage() {
                 </div>
               ) : fullText ? (
                 parseTurns(fullText).map((turn, i) => (
-                  <div key={i} className="flex flex-col gap-1">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      {turn.role}
-                    </p>
-                    <p className="text-sm whitespace-pre-wrap leading-relaxed">
-                      {turn.content}
-                    </p>
-                  </div>
+                  <ChatMessage
+                    key={i}
+                    role={turn.role}
+                    content={turn.content}
+                    avatarId={avatarId}
+                    displayName={displayName}
+                  />
                 ))
               ) : null}
             </div>

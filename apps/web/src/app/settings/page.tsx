@@ -1,9 +1,10 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
 import {
   Brain, Key, Heart, GitFork, Download,
-  Trash2, Plus, X, Check, Loader2, ExternalLink, Copy, Wallet, UserRound
+  Trash2, Plus, X, Check, Loader2, ExternalLink, Copy, Wallet, UserRound, Pencil
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,6 +76,7 @@ export default function SettingsPage() {
   const [profileAvatar, setProfileAvatar] = useState<string>(DEFAULT_AVATAR_ID);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
 
   // Account: copy address + delete modal.
   const [copiedAddr, setCopiedAddr] = useState(false);
@@ -227,12 +229,19 @@ export default function SettingsPage() {
         avatar_id: profileAvatar,
       });
       setProfileSaved(true);
+      setEditingProfile(false); // collapse back to the summary
       setTimeout(() => setProfileSaved(false), 3000);
     } catch {
       alert("Couldn't save your profile — backend unreachable.");
     } finally {
       setProfileSaving(false);
     }
+  }
+
+  function cancelEditProfile() {
+    setProfileName(displayName ?? "");
+    setProfileAvatar(avatarId ?? DEFAULT_AVATAR_ID);
+    setEditingProfile(false);
   }
 
   async function handleDeleteAccount() {
@@ -274,54 +283,84 @@ export default function SettingsPage() {
           </p>
         </div>
 
-        {/* Profile editor */}
+        {/* Profile — collapses to a summary after saving */}
         <section className="flex flex-col gap-4">
-          <div className="flex items-center gap-2">
-            <UserRound className="w-4 h-4 text-primary" />
-            <h2 className="font-semibold">Profile</h2>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <UserRound className="w-4 h-4 text-primary" />
+              <h2 className="font-semibold">Profile</h2>
+            </div>
+            {profileSaved && !editingProfile && (
+              <span className="text-xs text-primary flex items-center gap-1 animate-in fade-in">
+                <Check className="w-3.5 h-3.5" /> Saved
+              </span>
+            )}
           </div>
           <Separator />
-          <div className="flex items-center gap-4">
-            <CreatureAvatar id={profileAvatar} className="h-16 w-16 ring-2 ring-primary/20" />
-            <div className="flex-1 flex flex-col gap-1.5">
-              <label className="text-sm font-medium">Display name</label>
-              <Input
-                value={profileName}
-                onChange={(e) => setProfileName(e.target.value)}
-                maxLength={40}
-                placeholder="Your name"
-              />
+
+          {!editingProfile ? (
+            /* Collapsed summary */
+            <div className="flex items-center justify-between gap-4 animate-in fade-in slide-in-from-top-1 duration-300">
+              <div className="flex items-center gap-3 min-w-0">
+                <CreatureAvatar id={profileAvatar} className="h-14 w-14 ring-2 ring-primary/20" />
+                <div className="min-w-0">
+                  <p className="font-medium truncate">{profileName || "Add your name"}</p>
+                  <p className="text-xs text-muted-foreground capitalize">{profileAvatar}</p>
+                </div>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => setEditingProfile(true)}>
+                <Pencil className="w-3.5 h-3.5 mr-2" /> Edit profile
+              </Button>
             </div>
-          </div>
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium">Avatar</label>
-            <div className="grid grid-cols-5 gap-3 justify-items-center">
-              {AVATARS.map((a) => (
-                <button
-                  key={a.id}
-                  type="button"
-                  onClick={() => setProfileAvatar(a.id)}
-                  aria-label={a.label}
-                  aria-pressed={profileAvatar === a.id}
-                  title={a.label}
-                  className={`rounded-full transition-transform ${
-                    profileAvatar === a.id
-                      ? "ring-4 ring-primary scale-110"
-                      : "ring-1 ring-border hover:scale-105"
-                  }`}
-                >
-                  <CreatureAvatar id={a.id} className="h-12 w-12" />
-                </button>
-              ))}
+          ) : (
+            /* Expanded editor */
+            <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-top-1 duration-300">
+              <div className="flex items-center gap-4">
+                <CreatureAvatar id={profileAvatar} className="h-16 w-16 ring-2 ring-primary/20" />
+                <div className="flex-1 flex flex-col gap-1.5">
+                  <label className="text-sm font-medium">Display name</label>
+                  <Input
+                    value={profileName}
+                    onChange={(e) => setProfileName(e.target.value)}
+                    maxLength={40}
+                    placeholder="Your name"
+                  />
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium">Avatar</label>
+                <div className="grid grid-cols-5 gap-3 justify-items-center">
+                  {AVATARS.map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => setProfileAvatar(a.id)}
+                      aria-label={a.label}
+                      aria-pressed={profileAvatar === a.id}
+                      title={a.label}
+                      className={`rounded-full transition-transform ${
+                        profileAvatar === a.id
+                          ? "ring-4 ring-primary scale-110"
+                          : "ring-1 ring-border hover:scale-105"
+                      }`}
+                    >
+                      <CreatureAvatar id={a.id} className="h-12 w-12" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" className="w-fit" onClick={handleSaveProfile} disabled={profileSaving}>
+                  {profileSaving
+                    ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</>
+                    : "Save profile"}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={cancelEditProfile} disabled={profileSaving}>
+                  Cancel
+                </Button>
+              </div>
             </div>
-          </div>
-          <Button size="sm" className="w-fit" onClick={handleSaveProfile} disabled={profileSaving}>
-            {profileSaving
-              ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</>
-              : profileSaved
-                ? <><Check className="w-4 h-4 mr-2" />Saved!</>
-                : "Save profile"}
-          </Button>
+          )}
         </section>
 
         {/* Proxy setup — shows user their proxy URL + token */}
