@@ -1,35 +1,35 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useEnokiFlow, useZkLogin } from "@mysten/enoki/react";
 import { Button } from "@/components/ui/button";
+import { LogoutButton } from "@/components/LogoutButton";
 import {
-  Brain, Shield, GitFork, Loader2, AlertTriangle,
-  KeyRound, Search, Heart, ChevronDown,
+  Brain, Shield, GitFork, Loader2, AlertTriangle, ArrowRight,
 } from "lucide-react";
+
+
 
 export default function LandingPage() {
   const flow = useEnokiFlow();
-  const router = useRouter();
   const { address } = useZkLogin();
   const [signingIn, setSigningIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // If already signed in (refresh, return visit), skip the landing and go
-  // straight to the app. The Enoki SDK restores the zkLogin session from
-  // localStorage on mount, so `address` populates within the first render
-  // cycles when a session exists.
-  useEffect(() => {
-    if (address) {
-      router.replace("/search");
-    }
-  }, [address, router]);
+  // NOTE: we intentionally do NOT auto-redirect signed-in users away from the
+  // landing page. That redirect was what caused the logo to "glitch" back into
+  // the app — clicking the Mnemo logo (which links to "/") would mount this
+  // page and immediately bounce out. First-login routing is handled by
+  // /auth/callback, so the landing page is now a valid place to be while
+  // signed in.
 
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  const signedIn = mounted && Boolean(address);
   async function handleGoogleSignIn() {
     setError(null);
 
-    // Friendly pre-flight checks — much better than a silent 401.
     const enokiKey = process.env.NEXT_PUBLIC_ENOKI_API_KEY;
     const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
     if (!enokiKey) {
@@ -68,22 +68,27 @@ export default function LandingPage() {
     }
   }
 
-  function scrollToHowItWorks() {
-    document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" });
-  }
-
   return (
     <main className="min-h-screen bg-background flex flex-col">
 
-      {/* Navbar */}
+      {/* Navbar — adapts to signed-in state so the logo can lead back here. */}
       <nav className="flex items-center justify-between px-6 py-4 border-b">
-        <div className="flex items-center gap-2">
+        <Link href="/" className="flex items-center gap-2">
           <Brain className="w-6 h-6 text-primary" />
           <span className="font-bold text-lg tracking-tight">Mnemo</span>
-        </div>
-        <Button size="sm" onClick={handleGoogleSignIn} disabled={signingIn}>
-          {signingIn ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Signing in…</> : "Get started"}
-        </Button>
+        </Link>
+
+        {signedIn ? (
+          <div className="flex items-center gap-1">
+            <Link href="/chats"><Button variant="ghost" size="sm">My Memory</Button></Link>
+            <Link href="/settings"><Button variant="ghost" size="sm">Settings</Button></Link>
+            <LogoutButton />
+          </div>
+        ) : (
+          <Button size="sm" onClick={handleGoogleSignIn} disabled={signingIn}>
+            {signingIn ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Signing in…</> : "Get started"}
+          </Button>
+        )}
       </nav>
 
       {/* Hero */}
@@ -105,7 +110,7 @@ export default function LandingPage() {
         </p>
 
         {error && (
-          <div className="max-w-xl w-full rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex items-start gap-2 text-left">
+          <div className="max-w-xl w-full rounded-lg bg-destructive/10 border border-destructive/30 px-4 py-3 text-sm text-destructive flex items-start gap-2 text-left">
             <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
             <span>{error}</span>
           </div>
@@ -113,22 +118,35 @@ export default function LandingPage() {
 
         <div className="flex flex-col items-center gap-3 mt-2">
           <div className="flex gap-3">
-            <Button size="lg" onClick={handleGoogleSignIn} disabled={signingIn}>
-              {signingIn ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Signing in…</>
-              ) : (
-                "Sign in with Google"
-              )}
-            </Button>
-            <Button size="lg" variant="outline" onClick={scrollToHowItWorks}>
-              See how it works
-              <ChevronDown className="w-4 h-4 ml-1" />
-            </Button>
+            {signedIn ? (
+              <Link href="/search">
+                <Button size="lg">
+                  Open your memory
+                  <ArrowRight className="w-4 h-4 ml-1" />
+                </Button>
+              </Link>
+            ) : (
+              <Button size="lg" onClick={handleGoogleSignIn} disabled={signingIn}>
+                {signingIn ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Signing in…</>
+                ) : (
+                  "Sign in with Google"
+                )}
+              </Button>
+            )}
+            <Link href="/how-it-works">
+              <Button size="lg" variant="outline">
+                See how it works
+                <ArrowRight className="w-4 h-4 ml-1" />
+              </Button>
+            </Link>
           </div>
-          <p className="text-xs text-muted-foreground max-w-md">
-            First sign-in creates your encrypted Mnemo account automatically — no
-            password, no wallet to set up. Powered by zkLogin and gas-free via Enoki.
-          </p>
+          {!signedIn && (
+            <p className="text-xs text-muted-foreground max-w-md">
+              First sign-in creates your encrypted Mnemo account automatically — no
+              password, no wallet to set up. Powered by zkLogin and gas-free via Enoki.
+            </p>
+          )}
         </div>
       </section>
 
@@ -162,89 +180,9 @@ export default function LandingPage() {
           </div>
           <h3 className="font-semibold text-lg">Inherit your AI past</h3>
           <p className="text-muted-foreground text-sm">
-            Configure a dead-man&apos;s switch. After 90 days of silence, your
+            Configure a dead-man&apos;s switch. After a chosen silence, your
             designated recipient gains access. Your AI memory outlives you.
           </p>
-        </div>
-      </section>
-
-      {/* How it works */}
-      <section id="how-it-works" className="bg-muted/30 border-y px-6 py-20">
-        <div className="max-w-3xl mx-auto flex flex-col gap-10">
-          <div className="text-center flex flex-col gap-2">
-            <h2 className="text-3xl font-extrabold tracking-tight">How it works</h2>
-            <p className="text-muted-foreground">
-              Four steps. No wallet, no password, no servers reading your conversations.
-            </p>
-          </div>
-
-          <ol className="flex flex-col gap-6">
-            <li className="flex gap-4">
-              <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold shrink-0">1</div>
-              <div className="flex flex-col gap-1">
-                <h3 className="font-semibold flex items-center gap-2">
-                  <KeyRound className="w-4 h-4 text-primary" /> Sign in with Google
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  zkLogin derives a Sui address from your Google account. There&apos;s no
-                  seed phrase to back up and no wallet to install. First sign-in creates
-                  your Mnemo account on-chain automatically; gas is sponsored.
-                </p>
-              </div>
-            </li>
-
-            <li className="flex gap-4">
-              <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold shrink-0">2</div>
-              <div className="flex flex-col gap-1">
-                <h3 className="font-semibold flex items-center gap-2">
-                  <Shield className="w-4 h-4 text-primary" /> Point your AI tool at your proxy
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  Mnemo gives you a personal OpenAI-compatible endpoint. Drop it into
-                  Cursor, BoltAI, Cline — anything that takes a custom base URL. Every
-                  conversation flows through it and gets archived to your encrypted
-                  memory.
-                </p>
-              </div>
-            </li>
-
-            <li className="flex gap-4">
-              <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold shrink-0">3</div>
-              <div className="flex flex-col gap-1">
-                <h3 className="font-semibold flex items-center gap-2">
-                  <Search className="w-4 h-4 text-primary" /> Search across everything
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  Semantic search runs over the decrypted view in your browser. Find a
-                  fix you figured out months ago across any tool you&apos;ve ever used.
-                </p>
-              </div>
-            </li>
-
-            <li className="flex gap-4">
-              <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold shrink-0">4</div>
-              <div className="flex flex-col gap-1">
-                <h3 className="font-semibold flex items-center gap-2">
-                  <Heart className="w-4 h-4 text-primary" /> Set an heir (optional)
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  Pick a Sui address and a silence threshold. If you go quiet for that
-                  long, the on-chain dead-man&apos;s switch grants your heir decryption
-                  access. Enforced by a Move contract — Mnemo can&apos;t override it.
-                </p>
-              </div>
-            </li>
-          </ol>
-
-          <div className="flex justify-center pt-4">
-            <Button size="lg" onClick={handleGoogleSignIn} disabled={signingIn}>
-              {signingIn ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Signing in…</>
-              ) : (
-                "Get started — it's free"
-              )}
-            </Button>
-          </div>
         </div>
       </section>
 

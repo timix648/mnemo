@@ -6,12 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getMe, type MeResponse } from "@/lib/api";
+import { getMe, updateProfile, type MeResponse } from "@/lib/api";
 import { useEnokiFlow, useZkLogin } from "@mysten/enoki/react";
 import { useSuiClient } from "@mysten/dapp-kit";
 import { ensureAccount, lookupAccountId, InheritanceError } from "@/lib/inheritance";
+import { CreatureAvatar, AVATARS, DEFAULT_AVATAR_ID } from "@/components/avatars";
 
-const STEPS = ["Sign In", "Your API Key", "Your Endpoint", "Configure Your Tool"];
+const STEPS = ["Sign In", "Your Profile", "Your API Key", "Your Endpoint", "Configure Your Tool"];
 
 export default function OnboardPage() {
   const flow = useEnokiFlow();
@@ -30,6 +31,12 @@ export default function OnboardPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  // Profile step state.
+  const [displayName, setDisplayName] = useState("");
+  const [avatarId, setAvatarId] = useState<string>(DEFAULT_AVATAR_ID);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+
   // On-chain account creation state.
   const [accountStatus, setAccountStatus] =
     useState<"idle" | "checking" | "creating" | "ready" | "error">("idle");
@@ -40,7 +47,7 @@ export default function OnboardPage() {
   const proxyToken = me?.proxy_token ?? "loading...";
 
   useEffect(() => {
-    // If coming from auth callback, skip sign-in step
+    // If coming from auth callback, skip sign-in step → land on profile.
     const fromCallback = document.referrer.includes("/auth/callback") ||
       sessionStorage.getItem("mnemo_authed") === "true";
     if (fromCallback) {
@@ -49,9 +56,9 @@ export default function OnboardPage() {
     }
   }, []);
 
-  // Fetch identity + proxy details once the signed-in address resolves. This is
-  // also the first authenticated call, so it auto-provisions the user + default
-  // namespace on the backend.
+  // Fetch identity + proxy details once the signed-in address resolves. Also
+  // auto-provisions the user + default namespace on the backend, and prefills
+  // the profile fields if the user already has them.
   useEffect(() => {
     if (!address) {
       setLoading(false);
@@ -59,15 +66,16 @@ export default function OnboardPage() {
     }
     setLoading(true);
     getMe(address)
-      .then(setMe)
+      .then((m) => {
+        setMe(m);
+        if (m.display_name) setDisplayName(m.display_name);
+        if (m.avatar_id) setAvatarId(m.avatar_id);
+      })
       .catch(() => setError("Could not reach backend. Showing placeholder data."))
       .finally(() => setLoading(false));
   }, [address]);
 
-  // Once we know the signed-in address, create the on-chain account if it
-  // doesn't exist yet. This is the step that was missing — without it there's
-  // no MemWalAccount for the heir / heartbeat calls to target. Idempotent:
-  // ensureAccount() is a no-op if the account already exists.
+  // Create the on-chain account if it doesn't exist yet. Idempotent.
   useEffect(() => {
     if (!address) return;
     let cancelled = false;
@@ -97,7 +105,6 @@ export default function OnboardPage() {
     })();
 
     return () => { cancelled = true; };
-    // re-run if the address changes (e.g. after sign-in)
   }, [address, flow, suiClient]);
 
   async function retryAccount() {
@@ -137,6 +144,26 @@ export default function OnboardPage() {
     setTimeout(() => setter(false), 2000);
   }
 
+  async function handleSaveProfile() {
+    if (!address) {
+      setProfileError("Sign in with Google first.");
+      return;
+    }
+    setSavingProfile(true);
+    setProfileError(null);
+    try {
+      await updateProfile(address, {
+        display_name: displayName.trim() || null,
+        avatar_id: avatarId,
+      });
+      setStep(2);
+    } catch {
+      setProfileError("Couldn't save your profile — backend unreachable.");
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
   async function handleSaveKey() {
     const key = apiKey.trim();
     if (!key) return;
@@ -150,7 +177,6 @@ export default function OnboardPage() {
     const identityHeaders = { "X-Sui-Address": address };
 
     try {
-      // 1. Verify the key actually works with the provider BEFORE storing it.
       const vRes = await fetch("http://127.0.0.1:8001/keys/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...identityHeaders },
@@ -160,10 +186,9 @@ export default function OnboardPage() {
       const v = await vRes.json();
       if (!v.valid) {
         setSaveError(v.detail || "That key didn't work — double-check it and try again.");
-        return; // finally still clears `saving`
+        return;
       }
 
-      // 2. Key is good — store it.
       const res = await fetch("http://127.0.0.1:8001/keys", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...identityHeaders },
@@ -172,7 +197,7 @@ export default function OnboardPage() {
       if (!res.ok) throw new Error(`Failed: ${res.status}`);
       setSaveSuccess(true);
       setApiKey("");
-      setTimeout(() => setStep(2), 800);
+      setTimeout(() => setStep(3), 800);
     } catch {
       setSaveError("Could not save key — backend unreachable.");
     } finally {
@@ -180,12 +205,11 @@ export default function OnboardPage() {
     }
   }
 
-  // Small reusable status chip for the on-chain account.
   function AccountStatusBadge() {
     if (accountStatus === "idle") return null;
     if (accountStatus === "ready") {
       return (
-        <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700 flex items-center gap-2">
+        <div className="rounded-lg bg-primary/10 border border-primary/30 px-4 py-3 text-sm text-primary flex items-center gap-2">
           <ShieldCheck className="w-4 h-4" />
           Your on-chain Mnemo account is ready.
         </div>
@@ -193,7 +217,7 @@ export default function OnboardPage() {
     }
     if (accountStatus === "error") {
       return (
-        <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex flex-col gap-2">
+        <div className="rounded-lg bg-destructive/10 border border-destructive/30 px-4 py-3 text-sm text-destructive flex flex-col gap-2">
           <span>⚠️ {accountError}</span>
           <Button variant="outline" size="sm" className="w-fit" onClick={retryAccount}>
             Retry account setup
@@ -252,8 +276,63 @@ export default function OnboardPage() {
             </div>
           )}
 
-          {/* Step 1 — API Key */}
+          {/* Step 1 — Your Profile */}
           {step === 1 && (
+            <div className="flex flex-col gap-5">
+              <p className="text-muted-foreground text-sm">
+                Set up your profile. Your name and avatar appear on your messages
+                when you browse your memory.
+              </p>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium">Display name</label>
+                <Input
+                  placeholder="e.g. Timi"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  maxLength={40}
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium">Pick your avatar</label>
+                <div className="grid grid-cols-4 gap-3">
+                  {AVATARS.map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => setAvatarId(a.id)}
+                      aria-label={a.label}
+                      aria-pressed={avatarId === a.id}
+                      className={`flex flex-col items-center gap-1 rounded-xl border p-2 transition-colors ${
+                        avatarId === a.id
+                          ? "border-primary bg-primary/5 ring-2 ring-primary/30"
+                          : "border-border hover:bg-muted/50"
+                      }`}
+                    >
+                      <CreatureAvatar id={a.id} className="h-12 w-12" />
+                      <span className="text-[10px] text-muted-foreground">{a.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {profileError && (
+                <div className="rounded-lg bg-destructive/10 border border-destructive/30 px-4 py-3 text-sm text-destructive">
+                  ⚠️ {profileError}
+                </div>
+              )}
+
+              <Button className="w-full" onClick={handleSaveProfile} disabled={savingProfile}>
+                {savingProfile
+                  ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</>
+                  : <>Continue <ChevronRight className="w-4 h-4 ml-1" /></>}
+              </Button>
+            </div>
+          )}
+
+          {/* Step 2 — API Key */}
+          {step === 2 && (
             <div className="flex flex-col gap-4">
               <p className="text-muted-foreground text-sm">
                 Paste your API key. We verify it with your provider, then store
@@ -262,7 +341,6 @@ export default function OnboardPage() {
                 it in plaintext, is coming before mainnet.)
               </p>
 
-              {/* On-chain account setup runs in the background here. */}
               <AccountStatusBadge />
 
               <Tabs value={provider} onValueChange={(v) => setProvider(v as "openai" | "anthropic")}>
@@ -289,7 +367,7 @@ export default function OnboardPage() {
               </Tabs>
 
               {saveError && (
-                <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+                <div className="rounded-lg bg-destructive/10 border border-destructive/30 px-4 py-3 text-sm text-destructive">
                   ⚠️ {saveError}
                 </div>
               )}
@@ -310,8 +388,8 @@ export default function OnboardPage() {
             </div>
           )}
 
-          {/* Step 2 — Endpoint */}
-          {step === 2 && (
+          {/* Step 3 — Endpoint */}
+          {step === 3 && (
             <div className="flex flex-col gap-4">
               <p className="text-muted-foreground text-sm">
                 This is your personal Mnemo proxy endpoint. Paste it into any
@@ -359,22 +437,20 @@ export default function OnboardPage() {
                 </>
               )}
 
-              <Button className="w-full" onClick={() => setStep(3)} disabled={loading}>
+              <Button className="w-full" onClick={() => setStep(4)} disabled={loading}>
                 Next <ChevronRight className="w-4 h-4 ml-1" />
               </Button>
             </div>
           )}
 
-          {/* Step 3 — Configure tool */}
-          {step === 3 && (
+          {/* Step 4 — Configure tool */}
+          {step === 4 && (
             <div className="flex flex-col gap-4">
               <p className="text-muted-foreground text-sm">
                 Choose your AI tool below and follow the instructions to start
                 capturing your conversations.
               </p>
 
-              {/* Surface account status here too, so the user doesn't leave
-                  onboarding without a working on-chain account. */}
               <AccountStatusBadge />
 
               <Tabs defaultValue="cursor">

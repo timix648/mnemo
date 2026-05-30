@@ -6,6 +6,8 @@ export interface MeResponse {
   proxy_token: string;
   proxy_base_url: string;
   default_namespace_id: string;
+  display_name: string | null;
+  avatar_id: string | null;
 }
 
 export interface SearchResult {
@@ -247,4 +249,24 @@ export async function executeSponsoredApi(
     throw new Error(`/sponsor/execute failed: ${res.status} ${text}`);
   }
   return res.json();
+}
+
+export async function deleteAccount(suiAddress: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/me`, {
+    method: "DELETE",
+    headers: { "X-Sui-Address": suiAddress },
+  });
+  if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
+}
+
+export async function updateProfile(
+  suiAddress: string,
+  profile: { display_name?: string | null; avatar_id?: string | null },
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/me`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", "X-Sui-Address": suiAddress },
+    body: JSON.stringify(profile),
+  });
+  if (!res.ok) throw new Error(`Profile update failed: ${res.status}`);
 }

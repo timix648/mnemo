@@ -3,13 +3,14 @@
 import { useState, useEffect } from "react";
 import {
   Brain, Key, Heart, GitFork, Download,
-  Trash2, Plus, X, Check, Loader2, ExternalLink
+  Trash2, Plus, X, Check, Loader2, ExternalLink, Copy, Wallet
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useSuiClient } from "@mysten/dapp-kit";
 import { useEnokiFlow } from "@mysten/enoki/react";
 import { useMnemoIdentity } from "@/lib/useMnemoIdentity";
@@ -22,9 +23,7 @@ import {
 } from "@/lib/inheritance";
 import { LogoutButton } from "@/components/LogoutButton";
 import { ProxySetupCard } from "@/components/ProxySetupCard";
-
-
-
+import { deleteAccount } from "@/lib/api";
 
 const API_BASE = "http://127.0.0.1:8001";
 
@@ -55,6 +54,7 @@ export default function SettingsPage() {
   // dapp-kit / Enoki — the user signs & Mnemo sponsors gas via these.
   const suiClient = useSuiClient();
   const flow = useEnokiFlow();
+  const router = useRouter();
   // Identity: the signed-in zkLogin address + the user's default namespace.
   const { address, namespaceId } = useMnemoIdentity();
 
@@ -71,6 +71,12 @@ export default function SettingsPage() {
   const [inheritanceError, setInheritanceError] = useState<string | null>(null);
   const [inheritanceTx, setInheritanceTx] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+
+  // Account: copy address + delete flow.
+  const [copiedAddr, setCopiedAddr] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Load the user's stored provider keys once the address resolves.
   useEffect(() => {
@@ -135,8 +141,6 @@ export default function SettingsPage() {
   }
 
   // Real on-chain heartbeat (account::touch_activity), sponsored by Mnemo.
-  // Optimistic UI so the button feels instant; the chain call runs in the
-  // background and the status reflects the real result (re-read after).
   async function handleHeartbeat() {
     setPinged(true);
     setHeartbeatStatus("Pinging on-chain...");
@@ -145,7 +149,6 @@ export default function SettingsPage() {
       await sendHeartbeat(flow, suiClient, address);
       await refreshState();
     } catch (e) {
-      // Don't block the demo on a heartbeat failure — keep it soft.
       setHeartbeatStatus(
         e instanceof InheritanceError
           ? e.message
@@ -177,7 +180,6 @@ export default function SettingsPage() {
       setInheritanceTx(explorerUrl);
       setInheritanceSaved(true);
       setTimeout(() => setInheritanceSaved(false), 6000);
-      // Setting the heir also stamps last_active on-chain — re-read to reflect it.
       await refreshState();
       console.log("Inheritance set on-chain:", digest);
     } catch (e) {
@@ -218,6 +220,28 @@ export default function SettingsPage() {
     }
   }
 
+  function copyAddress() {
+    if (!address) return;
+    navigator.clipboard.writeText(address);
+    setCopiedAddr(true);
+    setTimeout(() => setCopiedAddr(false), 1500);
+  }
+
+  async function handleDeleteAccount() {
+    if (!address) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteAccount(address);
+      await flow.logout().catch(() => {});
+      sessionStorage.removeItem("mnemo_authed");
+      router.push("/");
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : "Delete failed. Backend unreachable.");
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
 
@@ -242,8 +266,31 @@ export default function SettingsPage() {
           </p>
         </div>
 
-         {/* Proxy setup — shows user their proxy URL + token */}
+        {/* Proxy setup — shows user their proxy URL + token */}
         <ProxySetupCard address={address} />
+
+        {/* Account — your Sui address (share it for inheritance) */}
+        <section className="flex flex-col gap-4">
+          <div className="flex items-center gap-2">
+            <Wallet className="w-4 h-4 text-primary" />
+            <h2 className="font-semibold">Your Sui address</h2>
+          </div>
+          <Separator />
+          <p className="text-sm text-muted-foreground">
+            Your on-chain identity. Share it with anyone who wants to name you as
+            their heir — or whose memory you&apos;ll inherit.
+          </p>
+          <div className="flex gap-2">
+            <code className="flex-1 px-3 py-2 rounded-md bg-muted text-xs font-mono break-all">
+              {address ?? "Sign in to see your address"}
+            </code>
+            {address && (
+              <Button size="sm" variant="outline" onClick={copyAddress}>
+                {copiedAddr ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+              </Button>
+            )}
+          </div>
+        </section>
 
         {/* API Keys */}
         <section className="flex flex-col gap-4">
@@ -311,7 +358,7 @@ export default function SettingsPage() {
               <p className="text-sm font-medium">Status</p>
               <p className="text-xs text-muted-foreground">{heartbeatStatus}</p>
             </div>
-            <div className="w-2 h-2 rounded-full bg-green-500" />
+            <div className="w-2 h-2 rounded-full bg-primary" />
           </div>
 
           <p className="text-sm text-muted-foreground">
@@ -395,13 +442,13 @@ export default function SettingsPage() {
           </div>
 
           {inheritanceError && (
-            <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+            <div className="rounded-lg bg-destructive/10 border border-destructive/30 px-4 py-3 text-sm text-destructive">
               ⚠️ {inheritanceError}
             </div>
           )}
 
           {inheritanceSaved && (
-            <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700 flex flex-col gap-1">
+            <div className="rounded-lg bg-primary/10 border border-primary/30 px-4 py-3 text-sm text-primary flex flex-col gap-1">
               <span>✓ Inheritance enforced on-chain.</span>
               {inheritanceTx && (
                 <a
@@ -472,9 +519,44 @@ export default function SettingsPage() {
             This cannot be undone.
           </p>
 
-          <Button variant="destructive" size="sm" className="w-fit">
-            <Trash2 className="w-4 h-4 mr-2" /> Delete account
-          </Button>
+          {!confirmDelete ? (
+            <Button
+              variant="destructive"
+              size="sm"
+              className="w-fit"
+              onClick={() => setConfirmDelete(true)}
+            >
+              <Trash2 className="w-4 h-4 mr-2" /> Delete account
+            </Button>
+          ) : (
+            <div className="flex flex-col gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-4">
+              <p className="text-sm font-medium text-destructive">
+                Are you absolutely sure? This permanently deletes your account,
+                API keys, and all memory metadata. It cannot be undone.
+              </p>
+              {deleteError && <p className="text-sm text-destructive">{deleteError}</p>}
+              <div className="flex gap-2">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleDeleteAccount}
+                  disabled={deleting}
+                >
+                  {deleting
+                    ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Deleting…</>
+                    : "Yes, delete everything"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setConfirmDelete(false)}
+                  disabled={deleting}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
         </section>
 
       </div>

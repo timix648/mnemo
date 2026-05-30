@@ -8,8 +8,7 @@ import { getMe, type MeResponse } from "@/lib/api";
 /**
  * Shows the user their proxy base URL + bearer token (the things they need to
  * point Cursor/BoltAI at). The token is masked by default; click "Show" to
- * reveal. Both have copy buttons. We pull values from /me each render to avoid
- * caching stale tokens after sign-in changes.
+ * reveal. Both have copy buttons.
  */
 export function ProxySetupCard({ address }: { address: string | null | undefined }) {
   const [me, setMe] = useState<MeResponse | null>(null);
@@ -17,6 +16,16 @@ export function ProxySetupCard({ address }: { address: string | null | undefined
   const [error, setError] = useState<string | null>(null);
   const [showToken, setShowToken] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  // Hydration guard: this component's content depends on the client-only
+  // zkLogin session, which doesn't exist during SSR. Render a single stable
+  // state on the server AND on the first client paint, then switch to the real
+  // branches after mount. Without this, server ("Sign in…") and client
+  // ("Loading…") disagree and React throws a hydration mismatch.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!address) {
@@ -38,6 +47,15 @@ export function ProxySetupCard({ address }: { address: string | null | undefined
     setTimeout(() => setCopiedField(null), 1500);
   }
 
+  // Server + first client render land here identically → no mismatch.
+  if (!mounted) {
+    return (
+      <div className="rounded-xl border bg-card p-5 flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="w-4 h-4 animate-spin" /> Loading your proxy setup…
+      </div>
+    );
+  }
+
   if (!address) {
     return (
       <div className="rounded-xl border bg-card p-5 text-sm text-muted-foreground">
@@ -54,7 +72,7 @@ export function ProxySetupCard({ address }: { address: string | null | undefined
   }
   if (error || !me) {
     return (
-      <div className="rounded-xl border bg-card p-5 text-sm text-yellow-700 bg-yellow-50">
+      <div className="rounded-xl border bg-card p-5 text-sm text-destructive bg-destructive/10">
         ⚠️ {error ?? "Couldn't load proxy setup."}
       </div>
     );

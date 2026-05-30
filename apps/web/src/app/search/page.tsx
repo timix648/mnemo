@@ -9,6 +9,7 @@ import Link from "next/link";
 import { searchMemories, getMemoryById, type SearchResult } from "@/lib/api";
 import { useMnemoIdentity } from "@/lib/useMnemoIdentity";
 import { LogoutButton } from "@/components/LogoutButton";
+import { ChatMessage } from "@/components/ChatMessage";
 
 const APP_COLORS: Record<string, string> = {
   cursor: "bg-blue-100 text-blue-700",
@@ -42,8 +43,8 @@ function ScoreBadge({ score }: { score: number }) {
   const pct = Math.round(score * 100);
   const color =
     pct >= 80 ? "bg-green-100 text-green-700" :
-    pct >= 60 ? "bg-yellow-100 text-yellow-700" :
-    "bg-slate-100 text-slate-600";
+      pct >= 60 ? "bg-yellow-100 text-yellow-700" :
+        "bg-slate-100 text-slate-600";
   return (
     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${color}`}>
       {pct}% match
@@ -67,7 +68,7 @@ function parseTurns(text: string): { role: string; content: string }[] {
 }
 
 export default function SearchPage() {
-  const { address, namespaceId, ready } = useMnemoIdentity();
+  const { address, namespaceId, displayName, avatarId, ready } = useMnemoIdentity();
 
   const [query, setQuery] = useState("");
   const [hasSearched, setHasSearched] = useState(false);
@@ -380,14 +381,8 @@ export default function SearchPage() {
                 </div>
               ) : fullText ? (
                 parseTurns(fullText).map((turn, i) => (
-                  <div key={i} className="flex flex-col gap-1">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      {turn.role}
-                    </p>
-                    <p className="text-sm whitespace-pre-wrap leading-relaxed">
-                      {turn.content}
-                    </p>
-                  </div>
+                  <ChatMessage key={i} role={turn.role} content={turn.content}
+                    avatarId={avatarId} displayName={displayName} />
                 ))
               ) : null}
             </div>
