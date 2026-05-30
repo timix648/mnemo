@@ -1,57 +1,79 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useEnokiFlow } from "@mysten/enoki/react";
 import { Brain, Loader2 } from "lucide-react";
+import { CreatureAvatar } from "@/components/avatars";
+
+const API_BASE = "http://127.0.0.1:8001";
 
 export default function AuthCallbackPage() {
   const router = useRouter();
   const flow = useEnokiFlow();
+  // When set, we render the "Welcome back" screen briefly before routing home.
+  const [welcome, setWelcome] = useState<{ name: string | null; avatarId: string | null } | null>(null);
 
   useEffect(() => {
     const hash = window.location.hash;
     const params = new URLSearchParams(window.location.search);
-
-    // Enoki puts the auth response in the URL hash or query params.
-    if (hash || params.get("id_token") || params.get("code")) {
-      flow.handleAuthCallback()
-        .then(async (result) => {
-          console.log("Auth callback success:", result);
-          sessionStorage.setItem("mnemo_authed", "true");
-
-          // Returning user (has a namespace already) → straight to /search.
-          // New user (no namespace yet) → /onboard.
-          // The backend auto-provisions a user + default namespace on first
-          // /me call, so a returning user reliably has default_namespace_id.
-          try {
-            const addr = (result as { address?: string })?.address;
-            if (addr) {
-              const res = await fetch("http://127.0.0.1:8001/me", {
-                headers: { "X-Sui-Address": addr },
-              });
-              if (res.ok) {
-                const me = await res.json();
-                if (me.default_namespace_id) {
-                  router.push("/search");
-                  return;
-                }
-              }
-            }
-          } catch {
-            // Network error or backend down — fall through to onboarding.
-          }
-          router.push("/onboard");
-        })
-        .catch((err) => {
-          console.error("Auth callback failed:", err);
-          router.push("/");
-        });
-    } else {
-      // No auth params — redirect to home.
+    if (!(hash || params.get("id_token") || params.get("code"))) {
       router.push("/");
+      return;
     }
+
+    flow.handleAuthCallback()
+      .then(async (result) => {
+        sessionStorage.setItem("mnemo_authed", "true");
+        const addr = (result as { address?: string })?.address;
+        if (!addr) {
+          router.push("/onboard");
+          return;
+        }
+
+        const headers = { "X-Sui-Address": addr };
+        try {
+          // A user who has already added at least one API key has completed
+          // onboarding → treat as returning: short welcome, then home.
+          // Otherwise it's a first run → full onboarding.
+          const [meRes, keysRes] = await Promise.all([
+            fetch(`${API_BASE}/me`, { headers }),
+            fetch(`${API_BASE}/keys`, { headers }),
+          ]);
+          const me = meRes.ok ? await meRes.json() : null;
+          const keys = keysRes.ok ? await keysRes.json() : [];
+          const returning = Array.isArray(keys) && keys.length > 0;
+
+          if (returning) {
+            setWelcome({ name: me?.display_name ?? null, avatarId: me?.avatar_id ?? null });
+            setTimeout(() => router.push("/chats"), 1600);
+            return;
+          }
+        } catch {
+          // Backend unreachable — fall through to onboarding.
+        }
+        router.push("/onboard");
+      })
+      .catch((err) => {
+        console.error("Auth callback failed:", err);
+        router.push("/");
+      });
   }, [flow, router]);
+
+  if (welcome) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+        <div className="flex flex-col items-center gap-4 text-center animate-in fade-in zoom-in-95 duration-500">
+          <CreatureAvatar id={welcome.avatarId} className="h-24 w-24 ring-4 ring-primary/20" />
+          <h1 className="text-2xl font-bold">
+            Welcome back{welcome.name ? `, ${welcome.name}` : ""}!
+          </h1>
+          <p className="text-muted-foreground text-sm">Taking you to your memory…</p>
+          <Loader2 className="w-5 h-5 animate-spin text-primary" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">

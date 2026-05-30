@@ -47,7 +47,15 @@ export default function OnboardPage() {
   const proxyToken = me?.proxy_token ?? "loading...";
 
   useEffect(() => {
-    // If coming from auth callback, skip sign-in step → land on profile.
+    const params = new URLSearchParams(window.location.search);
+    // "Add another key" from Settings → jump straight to the API-key step,
+    // skipping sign-in and profile.
+    if (params.get("step") === "key") {
+      sessionStorage.setItem("mnemo_authed", "true");
+      setStep(2);
+      return;
+    }
+    // Arriving fresh from sign-in → skip the sign-in step, start at profile.
     const fromCallback = document.referrer.includes("/auth/callback") ||
       sessionStorage.getItem("mnemo_authed") === "true";
     if (fromCallback) {
@@ -56,9 +64,8 @@ export default function OnboardPage() {
     }
   }, []);
 
-  // Fetch identity + proxy details once the signed-in address resolves. Also
-  // auto-provisions the user + default namespace on the backend, and prefills
-  // the profile fields if the user already has them.
+  // Fetch identity + proxy details once the signed-in address resolves; also
+  // prefill the profile fields if the user already has them.
   useEffect(() => {
     if (!address) {
       setLoading(false);
@@ -278,11 +285,20 @@ export default function OnboardPage() {
 
           {/* Step 1 — Your Profile */}
           {step === 1 && (
-            <div className="flex flex-col gap-5">
-              <p className="text-muted-foreground text-sm">
-                Set up your profile. Your name and avatar appear on your messages
-                when you browse your memory.
-              </p>
+            <div className="flex flex-col gap-6">
+              {/* Live preview of the chosen avatar */}
+              <div className="flex flex-col items-center gap-3 text-center">
+                <CreatureAvatar id={avatarId} className="h-24 w-24 ring-4 ring-primary/20" />
+                <div>
+                  <h2 className="text-lg font-semibold">
+                    {displayName.trim() ? `Hi, ${displayName.trim()}!` : "Make it yours"}
+                  </h2>
+                  <p className="text-sm text-muted-foreground max-w-xs">
+                    Pick a name and a sea-creature avatar. They appear on your
+                    messages when you browse your memory.
+                  </p>
+                </div>
+              </div>
 
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium">Display name</label>
@@ -296,7 +312,7 @@ export default function OnboardPage() {
 
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-medium">Pick your avatar</label>
-                <div className="grid grid-cols-4 gap-3">
+                <div className="grid grid-cols-5 gap-3 justify-items-center">
                   {AVATARS.map((a) => (
                     <button
                       key={a.id}
@@ -304,14 +320,14 @@ export default function OnboardPage() {
                       onClick={() => setAvatarId(a.id)}
                       aria-label={a.label}
                       aria-pressed={avatarId === a.id}
-                      className={`flex flex-col items-center gap-1 rounded-xl border p-2 transition-colors ${
+                      title={a.label}
+                      className={`rounded-full transition-transform ${
                         avatarId === a.id
-                          ? "border-primary bg-primary/5 ring-2 ring-primary/30"
-                          : "border-border hover:bg-muted/50"
+                          ? "ring-4 ring-primary scale-110"
+                          : "ring-1 ring-border hover:scale-105"
                       }`}
                     >
-                      <CreatureAvatar id={a.id} className="h-12 w-12" />
-                      <span className="text-[10px] text-muted-foreground">{a.label}</span>
+                      <CreatureAvatar id={a.id} className="h-14 w-14" />
                     </button>
                   ))}
                 </div>
@@ -323,7 +339,7 @@ export default function OnboardPage() {
                 </div>
               )}
 
-              <Button className="w-full" onClick={handleSaveProfile} disabled={savingProfile}>
+              <Button className="w-full" size="lg" onClick={handleSaveProfile} disabled={savingProfile}>
                 {savingProfile
                   ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</>
                   : <>Continue <ChevronRight className="w-4 h-4 ml-1" /></>}
@@ -337,8 +353,7 @@ export default function OnboardPage() {
               <p className="text-muted-foreground text-sm">
                 Paste your API key. We verify it with your provider, then store
                 it on your Mnemo backend and use it only to make calls on your
-                behalf. (Client-side Seal encryption, so the server never holds
-                it in plaintext, is coming before mainnet.)
+                behalf. (Client-side Seal encryption is coming before mainnet.)
               </p>
 
               <AccountStatusBadge />

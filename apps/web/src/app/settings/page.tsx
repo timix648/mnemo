@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import {
   Brain, Key, Heart, GitFork, Download,
-  Trash2, Plus, X, Check, Loader2, ExternalLink, Copy, Wallet
+  Trash2, Plus, X, Check, Loader2, ExternalLink, Copy, Wallet, UserRound
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,11 +23,11 @@ import {
 } from "@/lib/inheritance";
 import { LogoutButton } from "@/components/LogoutButton";
 import { ProxySetupCard } from "@/components/ProxySetupCard";
-import { deleteAccount } from "@/lib/api";
+import { deleteAccount, updateProfile } from "@/lib/api";
+import { CreatureAvatar, AVATARS, DEFAULT_AVATAR_ID } from "@/components/avatars";
 
 const API_BASE = "http://127.0.0.1:8001";
 
-// Turn the on-chain inheritance state into a human-readable heartbeat line.
 function formatHeartbeat(state: InheritanceState): string {
   if (state.dormancyMs === 0 || !state.heir) {
     return "Active · inheritance not configured yet";
@@ -51,12 +51,10 @@ interface ProviderKey {
 }
 
 export default function SettingsPage() {
-  // dapp-kit / Enoki — the user signs & Mnemo sponsors gas via these.
   const suiClient = useSuiClient();
   const flow = useEnokiFlow();
   const router = useRouter();
-  // Identity: the signed-in zkLogin address + the user's default namespace.
-  const { address, namespaceId } = useMnemoIdentity();
+  const { address, namespaceId, displayName, avatarId } = useMnemoIdentity();
 
   const [keys, setKeys] = useState<ProviderKey[]>([]);
   const [keysLoading, setKeysLoading] = useState(true);
@@ -72,20 +70,29 @@ export default function SettingsPage() {
   const [inheritanceTx, setInheritanceTx] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
-  // Account: copy address + delete flow.
+  // Profile editor.
+  const [profileName, setProfileName] = useState("");
+  const [profileAvatar, setProfileAvatar] = useState<string>(DEFAULT_AVATAR_ID);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileSaved, setProfileSaved] = useState(false);
+
+  // Account: copy address + delete modal.
   const [copiedAddr, setCopiedAddr] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  // Load the user's stored provider keys once the address resolves.
+  // Seed the profile editor once identity resolves.
+  useEffect(() => {
+    if (displayName) setProfileName(displayName);
+    if (avatarId) setProfileAvatar(avatarId);
+  }, [displayName, avatarId]);
+
   useEffect(() => {
     if (address) fetchKeys();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address]);
 
-  // Pull the real on-chain inheritance config once the address resolves, so the
-  // form reflects what's actually set rather than blank defaults.
   const refreshState = async () => {
     if (!address) return;
     try {
@@ -110,12 +117,9 @@ export default function SettingsPage() {
   async function fetchKeys() {
     if (!address) return;
     try {
-      const res = await fetch(`${API_BASE}/keys`, {
-        headers: { "X-Sui-Address": address },
-      });
+      const res = await fetch(`${API_BASE}/keys`, { headers: { "X-Sui-Address": address } });
       if (!res.ok) throw new Error("failed");
-      const data = await res.json();
-      setKeys(data);
+      setKeys(await res.json());
     } catch {
       setKeys([]);
     } finally {
@@ -140,7 +144,6 @@ export default function SettingsPage() {
     }
   }
 
-  // Real on-chain heartbeat (account::touch_activity), sponsored by Mnemo.
   async function handleHeartbeat() {
     setPinged(true);
     setHeartbeatStatus("Pinging on-chain...");
@@ -150,8 +153,7 @@ export default function SettingsPage() {
       await refreshState();
     } catch (e) {
       setHeartbeatStatus(
-        e instanceof InheritanceError
-          ? e.message
+        e instanceof InheritanceError ? e.message
           : "Couldn't confirm on-chain ping (still counts locally).",
       );
     } finally {
@@ -162,20 +164,14 @@ export default function SettingsPage() {
   async function handleSaveInheritance() {
     setInheritanceError(null);
     setInheritanceTx(null);
-
     if (!address) {
       setInheritanceError("Please sign in with Google before setting your heir.");
       return;
     }
-
     setInheritanceSaving(true);
     try {
       const { digest, explorerUrl } = await saveInheritance({
-        flow,
-        suiClient,
-        ownerAddress: address,
-        recipient,
-        thresholdDays: Number(threshold),
+        flow, suiClient, ownerAddress: address, recipient, thresholdDays: Number(threshold),
       });
       setInheritanceTx(explorerUrl);
       setInheritanceSaved(true);
@@ -184,8 +180,7 @@ export default function SettingsPage() {
       console.log("Inheritance set on-chain:", digest);
     } catch (e) {
       setInheritanceError(
-        e instanceof InheritanceError
-          ? e.message
+        e instanceof InheritanceError ? e.message
           : "On-chain save failed. Check your connection and try again.",
       );
     } finally {
@@ -198,15 +193,11 @@ export default function SettingsPage() {
     setExporting(true);
     try {
       const nsParam = namespaceId ? `namespace_id=${namespaceId}&` : "";
-      const res = await fetch(
-        `${API_BASE}/memories?${nsParam}limit=100&offset=0`,
-        { headers: { "X-Sui-Address": address } }
-      );
+      const res = await fetch(`${API_BASE}/memories?${nsParam}limit=100&offset=0`,
+        { headers: { "X-Sui-Address": address } });
       if (!res.ok) throw new Error("failed");
       const data = await res.json();
-      const blob = new Blob([JSON.stringify(data.results, null, 2)], {
-        type: "application/json",
-      });
+      const blob = new Blob([JSON.stringify(data.results, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -225,6 +216,23 @@ export default function SettingsPage() {
     navigator.clipboard.writeText(address);
     setCopiedAddr(true);
     setTimeout(() => setCopiedAddr(false), 1500);
+  }
+
+  async function handleSaveProfile() {
+    if (!address) return;
+    setProfileSaving(true);
+    try {
+      await updateProfile(address, {
+        display_name: profileName.trim() || null,
+        avatar_id: profileAvatar,
+      });
+      setProfileSaved(true);
+      setTimeout(() => setProfileSaved(false), 3000);
+    } catch {
+      alert("Couldn't save your profile — backend unreachable.");
+    } finally {
+      setProfileSaving(false);
+    }
   }
 
   async function handleDeleteAccount() {
@@ -262,9 +270,59 @@ export default function SettingsPage() {
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-bold">Settings</h1>
           <p className="text-muted-foreground text-sm">
-            Manage your API keys, inheritance, and account.
+            Manage your profile, API keys, inheritance, and account.
           </p>
         </div>
+
+        {/* Profile editor */}
+        <section className="flex flex-col gap-4">
+          <div className="flex items-center gap-2">
+            <UserRound className="w-4 h-4 text-primary" />
+            <h2 className="font-semibold">Profile</h2>
+          </div>
+          <Separator />
+          <div className="flex items-center gap-4">
+            <CreatureAvatar id={profileAvatar} className="h-16 w-16 ring-2 ring-primary/20" />
+            <div className="flex-1 flex flex-col gap-1.5">
+              <label className="text-sm font-medium">Display name</label>
+              <Input
+                value={profileName}
+                onChange={(e) => setProfileName(e.target.value)}
+                maxLength={40}
+                placeholder="Your name"
+              />
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium">Avatar</label>
+            <div className="grid grid-cols-5 gap-3 justify-items-center">
+              {AVATARS.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => setProfileAvatar(a.id)}
+                  aria-label={a.label}
+                  aria-pressed={profileAvatar === a.id}
+                  title={a.label}
+                  className={`rounded-full transition-transform ${
+                    profileAvatar === a.id
+                      ? "ring-4 ring-primary scale-110"
+                      : "ring-1 ring-border hover:scale-105"
+                  }`}
+                >
+                  <CreatureAvatar id={a.id} className="h-12 w-12" />
+                </button>
+              ))}
+            </div>
+          </div>
+          <Button size="sm" className="w-fit" onClick={handleSaveProfile} disabled={profileSaving}>
+            {profileSaving
+              ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</>
+              : profileSaved
+                ? <><Check className="w-4 h-4 mr-2" />Saved!</>
+                : "Save profile"}
+          </Button>
+        </section>
 
         {/* Proxy setup — shows user their proxy URL + token */}
         <ProxySetupCard address={address} />
@@ -309,36 +367,32 @@ export default function SettingsPage() {
           ) : (
             <div className="flex flex-col gap-2">
               {keys.map((k) => (
-                <div
-                  key={k.id}
-                  className="flex items-center justify-between rounded-lg border bg-card px-4 py-3"
-                >
+                <div key={k.id} className="flex items-center justify-between rounded-lg border bg-card px-4 py-3">
                   <div className="flex items-center gap-3">
                     <Badge variant="outline" className="capitalize">{k.provider}</Badge>
                     <span className="text-sm font-mono text-muted-foreground">
-                      {k.provider === "openai"
-                        ? "sk-••••••••••••••••"
-                        : "sk-ant-••••••••••••"}
+                      {k.provider === "openai" ? "sk-••••••••••••••••" : "sk-ant-••••••••••••"}
                     </span>
                     <span className="text-xs text-muted-foreground">
                       Added {new Date(k.created_at).toLocaleDateString()}
                     </span>
                   </div>
-                  <button
-                    onClick={() => revokeKey(k.provider)}
-                    disabled={revoking === k.provider}
-                  >
+                  <button onClick={() => revokeKey(k.provider)} disabled={revoking === k.provider}>
                     {revoking === k.provider
                       ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                      : <X className="w-4 h-4 text-muted-foreground hover:text-destructive transition-colors" />
-                    }
+                      : <X className="w-4 h-4 text-muted-foreground hover:text-destructive transition-colors" />}
                   </button>
                 </div>
               ))}
             </div>
           )}
 
-          <Link href="/onboard">
+          <p className="text-xs text-muted-foreground">
+            All keys are reached through the single proxy endpoint shown above —
+            the provider is chosen by the model name in each request.
+          </p>
+
+          <Link href="/onboard?step=key">
             <Button variant="outline" size="sm">
               <Plus className="w-4 h-4 mr-2" /> Add another key
             </Button>
@@ -362,21 +416,14 @@ export default function SettingsPage() {
           </div>
 
           <p className="text-sm text-muted-foreground">
-            Any activity on Mnemo counts as a heartbeat. If you have been
-            inactive and want to reset your silence timer manually, use the
-            button below.
+            Any activity on Mnemo counts as a heartbeat. If you have been inactive
+            and want to reset your silence timer manually, use the button below.
           </p>
 
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-fit"
-            onClick={handleHeartbeat}
-          >
+          <Button variant="outline" size="sm" className="w-fit" onClick={handleHeartbeat}>
             {pinged
               ? <><Check className="w-4 h-4 mr-2" />Pinged!</>
-              : <><Heart className="w-4 h-4 mr-2" />I&apos;m alive</>
-            }
+              : <><Heart className="w-4 h-4 mr-2" />I&apos;m alive</>}
           </Button>
         </section>
 
@@ -385,55 +432,38 @@ export default function SettingsPage() {
           <div className="flex items-center gap-2">
             <GitFork className="w-4 h-4 text-primary" />
             <h2 className="font-semibold">Inheritance</h2>
-            <Badge className="text-xs bg-primary/10 text-primary border-0">
-              Demo crown jewel
-            </Badge>
+            <Badge className="text-xs bg-primary/10 text-primary border-0">Demo crown jewel</Badge>
           </div>
           <Separator />
 
           <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-            After your silence threshold lapses, your designated recipient will
-            be granted access to decrypt your memory archive via Seal. This is
-            enforced by a Move contract on Sui — no one, including Mnemo, can
-            override it.
+            After your silence threshold lapses, your designated recipient will be
+            granted access to decrypt your memory archive via Seal. This is enforced
+            by a Move contract on Sui — no one, including Mnemo, can override it.
           </div>
 
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium">Recipient Sui address</label>
-              <Input
-                placeholder="0x..."
-                value={recipient}
-                onChange={(e) => setRecipient(e.target.value)}
-                className="font-mono"
-              />
+              <Input placeholder="0x..." value={recipient}
+                onChange={(e) => setRecipient(e.target.value)} className="font-mono" />
             </div>
 
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium">Silence threshold</label>
               <div className="flex items-center gap-3">
-                <Input
-                  type="number"
-                  value={threshold}
-                  onChange={(e) => setThreshold(e.target.value)}
-                  className="w-28"
-                  min="1"
-                  max="3650"
-                />
+                <Input type="number" value={threshold}
+                  onChange={(e) => setThreshold(e.target.value)} className="w-28" min="1" max="3650" />
                 <span className="text-sm text-muted-foreground">days of inactivity</span>
               </div>
             </div>
 
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium">
-                Note to recipient{" "}
-                <span className="text-muted-foreground font-normal">(optional)</span>
+                Note to recipient <span className="text-muted-foreground font-normal">(optional)</span>
               </label>
-              <Input
-                placeholder="A message your recipient will see when they gain access..."
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-              />
+              <Input placeholder="A message your recipient will see when they gain access..."
+                value={note} onChange={(e) => setNote(e.target.value)} />
               <p className="text-xs text-muted-foreground">
                 The heir address and silence window are enforced on-chain. The note
                 is delivered with the decryption key (stored off-chain).
@@ -451,30 +481,20 @@ export default function SettingsPage() {
             <div className="rounded-lg bg-primary/10 border border-primary/30 px-4 py-3 text-sm text-primary flex flex-col gap-1">
               <span>✓ Inheritance enforced on-chain.</span>
               {inheritanceTx && (
-                <a
-                  href={inheritanceTx}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs underline underline-offset-2"
-                >
+                <a href={inheritanceTx} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs underline underline-offset-2">
                   View transaction <ExternalLink className="w-3 h-3" />
                 </a>
               )}
             </div>
           )}
 
-          <Button
-            className="w-fit"
-            onClick={handleSaveInheritance}
-            disabled={inheritanceSaving}
-          >
-            {inheritanceSaving ? (
-              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving on-chain...</>
-            ) : inheritanceSaved ? (
-              <><Check className="w-4 h-4 mr-2" />Saved!</>
-            ) : (
-              "Save inheritance config"
-            )}
+          <Button className="w-fit" onClick={handleSaveInheritance} disabled={inheritanceSaving}>
+            {inheritanceSaving
+              ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving on-chain...</>
+              : inheritanceSaved
+                ? <><Check className="w-4 h-4 mr-2" />Saved!</>
+                : "Save inheritance config"}
           </Button>
         </section>
 
@@ -485,23 +505,14 @@ export default function SettingsPage() {
             <h2 className="font-semibold">Export</h2>
           </div>
           <Separator />
-
           <p className="text-sm text-muted-foreground">
-            Download all your stored memories as a decrypted JSON file.
-            This is your data — take it anywhere.
+            Download all your stored memories as a decrypted JSON file. This is
+            your data — take it anywhere.
           </p>
-
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-fit"
-            onClick={handleExport}
-            disabled={exporting}
-          >
+          <Button variant="outline" size="sm" className="w-fit" onClick={handleExport} disabled={exporting}>
             {exporting
               ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Exporting...</>
-              : <><Download className="w-4 h-4 mr-2" />Download my memory</>
-            }
+              : <><Download className="w-4 h-4 mr-2" />Download my memory</>}
           </Button>
         </section>
 
@@ -512,54 +523,55 @@ export default function SettingsPage() {
             <h2 className="font-semibold text-destructive">Danger zone</h2>
           </div>
           <Separator />
-
           <p className="text-sm text-muted-foreground">
-            Deleting your account destroys your Seal access keys. Memories
-            stored on Walrus will persist but become permanently inaccessible.
-            This cannot be undone.
+            Deleting your account destroys your Seal access keys. Memories stored
+            on Walrus will persist but become permanently inaccessible. This cannot be undone.
           </p>
-
-          {!confirmDelete ? (
-            <Button
-              variant="destructive"
-              size="sm"
-              className="w-fit"
-              onClick={() => setConfirmDelete(true)}
-            >
-              <Trash2 className="w-4 h-4 mr-2" /> Delete account
-            </Button>
-          ) : (
-            <div className="flex flex-col gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-4">
-              <p className="text-sm font-medium text-destructive">
-                Are you absolutely sure? This permanently deletes your account,
-                API keys, and all memory metadata. It cannot be undone.
-              </p>
-              {deleteError && <p className="text-sm text-destructive">{deleteError}</p>}
-              <div className="flex gap-2">
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={handleDeleteAccount}
-                  disabled={deleting}
-                >
-                  {deleting
-                    ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Deleting…</>
-                    : "Yes, delete everything"}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setConfirmDelete(false)}
-                  disabled={deleting}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          )}
+          <Button variant="destructive" size="sm" className="w-fit" onClick={() => setShowDeleteModal(true)}>
+            <Trash2 className="w-4 h-4 mr-2" /> Delete account
+          </Button>
         </section>
 
       </div>
+
+      {/* Full-screen delete confirmation modal */}
+      {showDeleteModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => !deleting && setShowDeleteModal(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border bg-card p-6 shadow-2xl flex flex-col gap-5 animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-destructive/10">
+              <Trash2 className="h-7 w-7 text-destructive" />
+            </div>
+            <div className="text-center">
+              <h2 className="text-xl font-bold">Delete your account?</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                This permanently deletes your account, API keys, and all memory
+                metadata. Memories on Walrus persist but become permanently
+                inaccessible. <span className="font-medium text-foreground">This cannot be undone.</span>
+              </p>
+            </div>
+            {deleteError && <p className="text-center text-sm text-destructive">{deleteError}</p>}
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => setShowDeleteModal(false)} disabled={deleting}>
+                Cancel
+              </Button>
+              <Button variant="destructive" className="flex-1" onClick={handleDeleteAccount} disabled={deleting}>
+                {deleting
+                  ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Deleting…</>
+                  : "Yes, delete everything"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
