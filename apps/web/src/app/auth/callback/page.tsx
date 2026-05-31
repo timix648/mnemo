@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useEnokiFlow, useZkLogin } from "@mysten/enoki/react";
-import { Brain, Loader2 } from "lucide-react";
 import { CreatureAvatar } from "@/components/avatars";
+import { MnemoSchoolLoader } from "@/components/Clownfish";
 
 const API_BASE = "http://127.0.0.1:8001";
 
@@ -61,7 +61,6 @@ export default function AuthCallbackPage() {
         const me = meRes.ok ? await meRes.json() : null;
         const keys = keysRes.ok ? await keysRes.json() : [];
 
-        // Returning = the account has previously saved a profile or a key.
         const returning =
           (Array.isArray(keys) && keys.length > 0) ||
           Boolean(me?.display_name) ||
@@ -112,13 +111,9 @@ export default function AuthCallbackPage() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
-      <div className="flex flex-col items-center gap-4 text-center">
-        <Brain className="w-10 h-10 text-primary animate-pulse" />
-        <h1 className="text-xl font-bold">Securing your identity...</h1>
-        <p className="text-muted-foreground text-sm">
-          Completing Google sign-in via Enoki zkLogin...
-        </p>
-        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      <div className="flex flex-col items-center gap-5 text-center">
+        <h1 className="text-xl font-bold">Securing your identity…</h1>
+        <MnemoSchoolLoader size={120} label="Completing Google sign-in via Enoki zkLogin…" />
       </div>
     </div>
   );
