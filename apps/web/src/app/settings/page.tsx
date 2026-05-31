@@ -83,6 +83,9 @@ export default function SettingsPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
 
   // Seed the profile editor once identity resolves.
   useEffect(() => {
@@ -250,7 +253,7 @@ export default function SettingsPage() {
     setDeleteError(null);
     try {
       await deleteAccount(address);
-      await flow.logout().catch(() => {});
+      await flow.logout().catch(() => { });
       sessionStorage.removeItem("mnemo_authed");
       router.push("/");
     } catch (e) {
@@ -338,11 +341,10 @@ export default function SettingsPage() {
                       aria-label={a.label}
                       aria-pressed={profileAvatar === a.id}
                       title={a.label}
-                      className={`rounded-full transition-transform ${
-                        profileAvatar === a.id
-                          ? "ring-4 ring-primary scale-110"
-                          : "ring-1 ring-border hover:scale-105"
-                      }`}
+                      className={`rounded-full transition-transform ${profileAvatar === a.id
+                        ? "ring-4 ring-primary scale-110"
+                        : "ring-1 ring-border hover:scale-105"
+                        }`}
                     >
                       <CreatureAvatar id={a.id} className="h-12 w-12" />
                     </button>
@@ -379,9 +381,9 @@ export default function SettingsPage() {
           </p>
           <div className="flex gap-2">
             <code className="flex-1 px-3 py-2 rounded-md bg-muted text-xs font-mono break-all">
-              {address ?? "Sign in to see your address"}
+              {!mounted ? "…" : address ?? "Sign in to see your address"}
             </code>
-            {address && (
+            {mounted && address && (
               <Button size="sm" variant="outline" onClick={copyAddress}>
                 {copiedAddr ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
               </Button>
