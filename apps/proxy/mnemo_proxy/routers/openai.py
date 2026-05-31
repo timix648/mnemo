@@ -17,6 +17,47 @@ router = APIRouter(prefix="/u/{user_id}/v1", tags=["openai"])
 log = logging.getLogger("mnemo.proxy.openai")
 
 
+# Chat clients (Chatbox, Cursor, etc.) make automatic side-calls to auto-title
+# or summarize a conversation. These are not real user conversations — they're
+# the model talking about the chat — so we forward them upstream (the client
+# needs its title) but skip capturing them as memories. Detect by the
+# distinctive instruction phrasing these prompts use.
+_TITLE_CALL_MARKERS = (
+    "give this conversation a name",
+    "name this conversation",
+    "the name is:",
+    "10 words max",
+    "generate a title",
+    "summarize this conversation in",
+    "short title",
+)
+
+
+def _is_meta_call(body: dict) -> bool:
+    """True if the request looks like an auto-title/summary side-call rather
+    than a real conversation worth capturing. Forwarded upstream regardless;
+    this only governs whether we store it as a memory."""
+    if not isinstance(body, dict):
+        return False
+    messages = body.get("messages") or []
+    blob_parts: list[str] = []
+    for m in messages:
+        if not isinstance(m, dict):
+            continue
+        content = m.get("content")
+        if isinstance(content, str):
+            blob_parts.append(content)
+        elif isinstance(content, list):
+            # OpenAI "parts" format: list of {type, text}
+            for part in content:
+                if isinstance(part, dict) and isinstance(part.get("text"), str):
+                    blob_parts.append(part["text"])
+    blob = " ".join(blob_parts).lower()
+    if not blob:
+        return False
+    return any(marker in blob for marker in _TITLE_CALL_MARKERS)
+
+
 @router.post("/chat/completions")
 async def chat_completions(
     user_id: str,
@@ -69,7 +110,12 @@ async def chat_completions(
         except json.JSONDecodeError:
             resp_json = {"raw": resp.text}
 
-        if resp.status_code == 200 and settings.capture_enabled and user.default_namespace_id:
+        if (
+            resp.status_code == 200
+            and settings.capture_enabled
+            and user.default_namespace_id
+            and not _is_meta_call(body)
+        ):
             await enqueue_capture({
                 "user_id": str(user.id),
                 "namespace_id": str(user.default_namespace_id),
@@ -129,7 +175,12 @@ async def _stream(upstream_url, raw_body, headers, user, request_body, source_ap
                 if "content" in delta and delta["content"]:
                     parts.append(delta["content"])
 
-    if settings.capture_enabled and parts and user.default_namespace_id:
+    if (
+        settings.capture_enabled
+        and parts
+        and user.default_namespace_id
+        and not _is_meta_call(request_body)
+    ):
         reconstructed: dict = {
             "model": accum_model,
             "choices": [{

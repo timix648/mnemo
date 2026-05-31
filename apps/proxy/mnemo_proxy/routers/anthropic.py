@@ -23,6 +23,58 @@ log = logging.getLogger("mnemo.proxy.anthropic")
 ANTHROPIC_VERSION = "2023-06-01"
 
 
+# Chat clients (Chatbox, etc.) make automatic side-calls to auto-title or
+# summarize a conversation. These are not real user conversations — they're the
+# model talking about the chat — so we forward them upstream (the client needs
+# its title) but skip capturing them as memories. Anthropic carries the system
+# prompt in a top-level `system` field (string OR list of blocks), so we check
+# that in addition to the messages.
+_TITLE_CALL_MARKERS = (
+    "give this conversation a name",
+    "name this conversation",
+    "the name is:",
+    "10 words max",
+    "generate a title",
+    "summarize this conversation in",
+    "short title",
+)
+
+
+def _is_meta_call(body: dict) -> bool:
+    """True if the request looks like an auto-title/summary side-call rather
+    than a real conversation worth capturing. Forwarded upstream regardless;
+    this only governs whether we store it as a memory."""
+    if not isinstance(body, dict):
+        return False
+    blob_parts: list[str] = []
+
+    # Anthropic system prompt: string or list of {type, text} blocks.
+    system = body.get("system")
+    if isinstance(system, str):
+        blob_parts.append(system)
+    elif isinstance(system, list):
+        for block in system:
+            if isinstance(block, dict) and isinstance(block.get("text"), str):
+                blob_parts.append(block["text"])
+
+    # Messages: content is a string or a list of blocks.
+    for m in body.get("messages") or []:
+        if not isinstance(m, dict):
+            continue
+        content = m.get("content")
+        if isinstance(content, str):
+            blob_parts.append(content)
+        elif isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict) and isinstance(block.get("text"), str):
+                    blob_parts.append(block["text"])
+
+    blob = " ".join(blob_parts).lower()
+    if not blob:
+        return False
+    return any(marker in blob for marker in _TITLE_CALL_MARKERS)
+
+
 @router.post("/messages")
 async def messages(
     user_id: str,
@@ -67,7 +119,12 @@ async def messages(
         except json.JSONDecodeError:
             resp_json = {"raw": resp.text}
 
-        if resp.status_code == 200 and settings.capture_enabled and user.default_namespace_id:
+        if (
+            resp.status_code == 200
+            and settings.capture_enabled
+            and user.default_namespace_id
+            and not _is_meta_call(body)
+        ):
             await enqueue_capture({
                 "user_id": str(user.id),
                 "namespace_id": str(user.default_namespace_id),
@@ -115,7 +172,12 @@ async def _stream(upstream_url, raw_body, headers, user, request_body, source_ap
                 elif event_type == "message_delta":
                     usage.update(payload.get("usage", {}))
 
-    if settings.capture_enabled and text_parts and user.default_namespace_id:
+    if (
+        settings.capture_enabled
+        and text_parts
+        and user.default_namespace_id
+        and not _is_meta_call(request_body)
+    ):
         reconstructed = {
             "model": model,
             "content": [{"type": "text", "text": "".join(text_parts)}],
