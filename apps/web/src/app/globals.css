@@ -156,3 +156,12 @@
     background: color-mix(in oklab, var(--primary) 30%, transparent);
   }
 }
+
+
+body {
+  background-image: url("/img/seabed.png");
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}

@@ -157,7 +157,7 @@ export default function ChatsPage() {
   });
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background/60 backdrop-blur-sm flex flex-col">
 
       {/* Navbar */}
       <nav className="flex items-center justify-between px-6 py-4 border-b">
@@ -189,7 +189,7 @@ export default function ChatsPage() {
         {/* Error banner */}
         {backendError && (
           <div className="rounded-lg bg-yellow-50 border border-yellow-200 px-4 py-3 text-sm text-yellow-800">
-            ⚠️ Could not reach backend — please check your services are running.
+          Could not reach backend, please check your services are running.
           </div>
         )}
 

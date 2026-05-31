@@ -243,7 +243,7 @@ export default function OnboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background/60 backdrop-blur-sm flex flex-col">
 
       {/* Navbar */}
       <nav className="flex items-center gap-2 px-6 py-4 border-b">
