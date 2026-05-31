@@ -50,27 +50,27 @@ export default function HowItWorksPage() {
   return (
     <main className="relative min-h-screen flex flex-col overflow-hidden">
       {/* Soft ocean gradient backdrop */}
-      
-<div className="pointer-events-none fixed inset-0 bg-gradient-to-b from-accent/40 via-background to-primary/15" />
+      <div className="pointer-events-none fixed inset-0 bg-gradient-to-b from-accent/40 via-background to-primary/15" />
+
       {/* Header */}
       <nav className="relative z-10 flex items-center justify-between px-6 py-4 border-b border-white/10 bg-background/40 backdrop-blur-md">
         <Link href="/" className="flex items-center gap-2">
           <Brain className="w-6 h-6 text-primary" />
-          <span className="font-bold text-lg tracking-tight">Mnemo</span>
+          <span className="font-bold text-base sm:text-lg tracking-tight">Mnemo</span>
         </Link>
         <Link href="/">
           <Button variant="ghost" size="sm"><ArrowLeft className="w-4 h-4 mr-1.5" /> Back</Button>
         </Link>
       </nav>
 
-      <div className="relative z-10 max-w-3xl mx-auto w-full px-6 py-16 flex flex-col gap-16">
+      <div className="relative z-10 max-w-3xl mx-auto w-full px-5 sm:px-6 py-10 sm:py-16 flex flex-col gap-10 sm:gap-16">
 
         {/* Intro */}
         <header className="flex flex-col gap-4">
           <span className="inline-flex w-fit items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
             Encrypted · Portable · Yours forever
           </span>
-          <h1 className="text-4xl font-extrabold tracking-tight">Own your AI memory</h1>
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight">Own your AI memory</h1>
           <p className="text-lg text-muted-foreground leading-relaxed">
             Mnemo is a portable, encrypted memory layer for your AI conversations. It
             captures what you discuss with AI tools, keeps it private and under your

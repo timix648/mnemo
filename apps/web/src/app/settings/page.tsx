@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -81,11 +80,10 @@ export default function SettingsPage() {
   // Account: copy address + delete modal.
   const [copiedAddr, setCopiedAddr] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => { setMounted(true); }, []);
 
   // Seed the profile editor once identity resolves.
   useEffect(() => {
@@ -253,7 +251,7 @@ export default function SettingsPage() {
     setDeleteError(null);
     try {
       await deleteAccount(address);
-      await flow.logout().catch(() => { });
+      await flow.logout().catch(() => {});
       sessionStorage.removeItem("mnemo_authed");
       router.push("/");
     } catch (e) {
@@ -332,7 +330,7 @@ export default function SettingsPage() {
               </div>
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-medium">Avatar</label>
-                <div className="grid grid-cols-5 gap-3 justify-items-center">
+                <div className="grid grid-cols-4 sm:grid-cols-5 gap-3 justify-items-center">
                   {AVATARS.map((a) => (
                     <button
                       key={a.id}
@@ -341,10 +339,11 @@ export default function SettingsPage() {
                       aria-label={a.label}
                       aria-pressed={profileAvatar === a.id}
                       title={a.label}
-                      className={`rounded-full transition-transform ${profileAvatar === a.id
-                        ? "ring-4 ring-primary scale-110"
-                        : "ring-1 ring-border hover:scale-105"
-                        }`}
+                      className={`rounded-full transition-transform ${
+                        profileAvatar === a.id
+                          ? "ring-4 ring-primary scale-110"
+                          : "ring-1 ring-border hover:scale-105"
+                      }`}
                     >
                       <CreatureAvatar id={a.id} className="h-12 w-12" />
                     </button>

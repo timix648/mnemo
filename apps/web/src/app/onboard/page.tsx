@@ -288,7 +288,7 @@ export default function OnboardPage() {
             <div className="flex flex-col gap-6">
               {/* Live preview of the chosen avatar */}
               <div className="flex flex-col items-center gap-3 text-center">
-                <CreatureAvatar id={avatarId} className="h-24 w-24 ring-4 ring-primary/20" />
+                <CreatureAvatar id={avatarId} className="h-20 w-20 sm:h-24 sm:w-24 ring-4 ring-primary/20" />
                 <div>
                   <h2 className="text-lg font-semibold">
                     {displayName.trim() ? `Hi, ${displayName.trim()}!` : "Make it yours"}
@@ -312,7 +312,7 @@ export default function OnboardPage() {
 
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-medium">Pick your avatar</label>
-                <div className="grid grid-cols-5 gap-3 justify-items-center">
+                <div className="grid grid-cols-4 sm:grid-cols-5 gap-3 justify-items-center">
                   {AVATARS.map((a) => (
                     <button
                       key={a.id}
@@ -327,7 +327,7 @@ export default function OnboardPage() {
                           : "ring-1 ring-border hover:scale-105"
                       }`}
                     >
-                      <CreatureAvatar id={a.id} className="h-14 w-14" />
+                      <CreatureAvatar id={a.id} className="h-12 w-12 sm:h-14 sm:w-14" />
                     </button>
                   ))}
                 </div>

@@ -104,7 +104,7 @@ export default function LandingPage() {
         <nav className="flex items-center justify-between px-6 py-4 border-b border-white/20 bg-background/30 backdrop-blur-md">
           <Link href="/" className="flex items-center gap-2">
             <Brain className="w-6 h-6 text-primary" />
-            <span className="font-bold text-lg tracking-tight">Mnemo</span>
+            <span className="font-bold text-base sm:text-lg tracking-tight">Mnemo</span>
           </Link>
           {signedIn ? (
             <div className="flex items-center gap-1">
@@ -118,13 +118,13 @@ export default function LandingPage() {
         </nav>
 
         {/* Hero */}
-        <section className="flex flex-1 items-center justify-center px-6 py-20">
-          <div className="relative w-full max-w-2xl overflow-hidden rounded-3xl border border-white/30 bg-background/50 backdrop-blur-xl shadow-2xl ring-1 ring-white/10 px-8 py-12 flex flex-col items-center text-center gap-6">
+        <section className="flex flex-1 items-center justify-center px-4 py-12 sm:py-20">
+          <div className="relative w-full max-w-2xl overflow-hidden rounded-3xl border border-white/30 bg-background/50 backdrop-blur-xl shadow-2xl ring-1 ring-white/10 px-5 py-8 sm:px-8 sm:py-12 flex flex-col items-center text-center gap-5 sm:gap-6">
             <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-white/50" />
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/10 to-transparent" />
 
             {/* Animated glassy → color-fill headline */}
-            <h1 className="relative text-5xl font-extrabold tracking-tight leading-tight">
+            <h1 className="relative text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight leading-tight">
               <span className="mnemo-word">
                 <span className="mnemo-base">Your AI memory,</span>
                 <span aria-hidden className="mnemo-fill mnemo-fill-ink">Your AI memory,</span>
@@ -135,7 +135,7 @@ export default function LandingPage() {
               </span>
             </h1>
 
-            <p className="relative text-muted-foreground text-lg max-w-xl">
+            <p className="relative text-muted-foreground text-base sm:text-lg max-w-xl">
               Mnemo captures every AI conversation you have — across Cursor, Claude,
               ChatGPT, and more — encrypts it, and makes it searchable. Forever.
             </p>
