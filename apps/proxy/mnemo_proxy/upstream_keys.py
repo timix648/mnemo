@@ -11,11 +11,12 @@ SECURITY (testnet beta): key_material is read as stored (currently plaintext).
 Before mainnet, swap step (1) for a Seal-decrypt via the sidecar (Use #2) so the
 server never holds plaintext keys. The function signature stays identical.
 """
+
 import logging
 from typing import Optional
 
 from sqlalchemy import text
-
+from mnemo_proxy.keycrypto import decrypt_key
 from mnemo_proxy.auth import AuthedUser
 from mnemo_proxy.config import settings
 from mnemo_proxy.db import session
@@ -26,18 +27,20 @@ log = logging.getLogger("mnemo.proxy.keys")
 async def _user_key(user_id, provider: str) -> Optional[str]:
     """Return the user's own stored key for this provider, or None."""
     async with session() as s:
-        row = (await s.execute(
-            text(
-                """
+        row = (
+            await s.execute(
+                text(
+                    """
                 SELECT key_material
                   FROM provider_keys
                  WHERE user_id = :uid AND provider = :p
                 """
-            ),
-            {"uid": user_id, "p": provider},
-        )).first()
+                ),
+                {"uid": user_id, "p": provider},
+            )
+        ).first()
     if row and row.key_material:
-        return row.key_material
+        return decrypt_key(row.key_material)
     return None
 
 

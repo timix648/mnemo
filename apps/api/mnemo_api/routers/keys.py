@@ -14,13 +14,14 @@ or going to mainnet, replace this with Seal-encrypted storage (the blueprint's
 intended design) so the server never holds plaintext keys. The list/return
 paths NEVER echo the key back — only metadata (provider, a masked hint).
 """
+
 import logging
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import text
-
+from mnemo_api.keycrypto import encrypt_key, decrypt_key
 from mnemo_api.auth import CurrentUser, require_user
 from mnemo_api.db import session
 
@@ -67,7 +68,9 @@ async def _check_provider_key(provider: str, key: str) -> ValidateResult:
         headers = {"x-api-key": key, "anthropic-version": "2023-06-01"}
         label = "Anthropic"
     else:
-        return ValidateResult(valid=False, detail="provider must be openai or anthropic")
+        return ValidateResult(
+            valid=False, detail="provider must be openai or anthropic"
+        )
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -97,7 +100,9 @@ async def _check_provider_key(provider: str, key: str) -> ValidateResult:
 @router.post("/validate", response_model=ValidateResult)
 async def validate_key(body: ValidateKey, user: CurrentUser = Depends(require_user)):
     if body.provider not in ("openai", "anthropic"):
-        raise HTTPException(status_code=400, detail="provider must be openai or anthropic")
+        raise HTTPException(
+            status_code=400, detail="provider must be openai or anthropic"
+        )
     if not body.key or not body.key.strip():
         raise HTTPException(status_code=400, detail="key is required")
     return await _check_provider_key(body.provider, body.key.strip())
@@ -106,21 +111,23 @@ async def validate_key(body: ValidateKey, user: CurrentUser = Depends(require_us
 @router.get("")
 async def list_keys(user: CurrentUser = Depends(require_user)):
     async with session() as s:
-        rows = (await s.execute(
-            text(
-                """
+        rows = (
+            await s.execute(
+                text(
+                    """
                 SELECT id, provider, key_material, created_at
                   FROM provider_keys WHERE user_id = :uid
                 """
-            ),
-            {"uid": user.id},
-        )).all()
+                ),
+                {"uid": user.id},
+            )
+        ).all()
     # NEVER return key_material itself — only a masked hint.
     return [
         {
             "id": str(r.id),
             "provider": r.provider,
-            "key_hint": _mask(r.key_material or ""),
+            "key_hint": _mask(decrypt_key(r.key_material or "")),
             "has_key": bool(r.key_material),
             "created_at": r.created_at.isoformat(),
         }
@@ -131,25 +138,38 @@ async def list_keys(user: CurrentUser = Depends(require_user)):
 @router.post("")
 async def save_key(body: SaveKey, user: CurrentUser = Depends(require_user)):
     if body.provider not in ("openai", "anthropic"):
-        raise HTTPException(status_code=400, detail="provider must be openai or anthropic")
+        raise HTTPException(
+            status_code=400, detail="provider must be openai or anthropic"
+        )
     if not body.key or not body.key.strip():
         raise HTTPException(status_code=400, detail="key is required")
 
     key = body.key.strip()
+    stored = encrypt_key(key)  # encrypt-at-rest before storage
     async with session() as s:
-        row = (await s.execute(
-            text(
-                """
+        row = (
+            await s.execute(
+                text(
+                    """
                 INSERT INTO provider_keys (user_id, provider, key_material)
                 VALUES (:uid, :p, :k)
                 ON CONFLICT (user_id, provider)
                 DO UPDATE SET key_material = EXCLUDED.key_material
                 RETURNING id, provider, key_material, created_at
                 """
-            ),
-            {"uid": user.id, "p": body.provider, "k": key},
-        )).first()
+                ),
+                {"uid": user.id, "p": body.provider, "k": stored},
+            )
+        ).first()
         await s.commit()
+
+    return {
+        "id": str(row.id),
+        "provider": row.provider,
+        "key_hint": _mask(key),  # mask the plaintext, not the ciphertext
+        "has_key": True,
+        "created_at": row.created_at.isoformat(),
+    }
 
     return {
         "id": str(row.id),
