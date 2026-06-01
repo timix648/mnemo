@@ -45,6 +45,7 @@ export default function OnboardPage() {
   const progress = ((step + 1) / STEPS.length) * 100;
   const endpoint = me?.proxy_base_url ?? "https://proxy.mnemo.app/v1/loading...";
   const proxyToken = me?.proxy_token ?? "loading...";
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:8001";
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -184,7 +185,7 @@ export default function OnboardPage() {
     const identityHeaders = { "X-Sui-Address": address };
 
     try {
-      const vRes = await fetch("http://127.0.0.1:8001/keys/validate", {
+     const vRes = await fetch(`${API_BASE}/keys/validate`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...identityHeaders },
         body: JSON.stringify({ provider, key }),
@@ -196,7 +197,7 @@ export default function OnboardPage() {
         return;
       }
 
-      const res = await fetch("http://127.0.0.1:8001/keys", {
+      const res = await fetch(`${API_BASE}/keys`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...identityHeaders },
         body: JSON.stringify({ provider, key }),

@@ -23,7 +23,7 @@ import { ProxySetupCard } from "@/components/ProxySetupCard";
 import { deleteAccount, updateProfile } from "@/lib/api";
 import { CreatureAvatar, AVATARS, DEFAULT_AVATAR_ID } from "@/components/avatars";
 
-const API_BASE = "http://127.0.0.1:8001";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:8001";
 
 function formatHeartbeat(state: InheritanceState): string {
   if (state.dormancyMs === 0 || !state.heir) {
