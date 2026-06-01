@@ -5,8 +5,8 @@ import { Waves, X, ExternalLink } from "lucide-react";
 
 const SOCIALS = [
   { label: "GitHub", href: "https://github.com/timix648/mnemo" },
-  { label: "X / Twitter", href: "https://x.com/" },
-  { label: "Discord", href: "https://discord.com/" },
+  { label: "X / Twitter", href: "https://x.com/_Mnemo__" },
+  { label: "Telegram", href: "https://t.me/b0sofweb3" },
 ];
 
 export default function SocialsButton() {
