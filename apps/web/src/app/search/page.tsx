@@ -290,7 +290,7 @@ export default function SearchPage() {
                         onClick={() => toggleContext(r)}
                       >
                         {inContext(r)
-                          ? <><Check className="w-3 h-3 mr-1" />Added (click to remove)</>
+                          ? <><Check className="w-3 h-3 mr-1" />Added</>
                           : <><Plus className="w-3 h-3 mr-1" />Add to context</>}
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => viewFull(r)}>

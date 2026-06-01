@@ -305,7 +305,7 @@ export default function OnboardPage() {
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium">Display name</label>
                 <Input
-                  placeholder="e.g. Timi"
+                  placeholder="e.g. Boogle"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   maxLength={40}
