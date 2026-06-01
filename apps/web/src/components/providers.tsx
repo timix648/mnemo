@@ -8,7 +8,10 @@ import RouteTransition from "@/components/RouteTransition";
 import SocialsButton from "@/components/SocialsButton";
 
 const { networkConfig } = createNetworkConfig({
-  testnet: { url: "https://fullnode.testnet.sui.io:443" },
+  testnet: {
+    url: "https://fullnode.testnet.sui.io:443",
+    network: "testnet",
+  },
 });
 
 export default function Providers({ children }: { children: React.ReactNode }) {

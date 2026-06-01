@@ -58,7 +58,7 @@ function parseTurns(text: string): { role: string; content: string }[] {
 }
 
 export default function ChatsPage() {
-  const { address, namespaceId, displayName, avatarId } = useMnemoIdentity();
+  const { address, namespaceId, displayName, avatarId, ready } = useMnemoIdentity();
 
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("All");
@@ -76,6 +76,11 @@ export default function ChatsPage() {
 
   useEffect(() => {
     if (!address) return;
+    if (!namespaceId) {
+      // Account still resolving -> keep the spinner; resolved but no namespace -> stop.
+      if (ready) setLoading(false);
+      return;
+    }
     setLoading(true);
     getMemories(address, namespaceId)
       .then((data) => {
@@ -91,7 +96,7 @@ export default function ChatsPage() {
       })
       .catch(() => setBackendError(true))
       .finally(() => setLoading(false));
-  }, [address, namespaceId]);
+  }, [address, namespaceId, ready]);
 
   // Close modal on Escape
   useEffect(() => {
