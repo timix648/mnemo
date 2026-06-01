@@ -165,7 +165,7 @@ export default function OnboardPage() {
       });
       setStep(2);
     } catch {
-      setProfileError("Couldn't save your profile — backend unreachable.");
+      setProfileError("Couldn't save your profile");
     } finally {
       setSavingProfile(false);
     }
@@ -192,7 +192,7 @@ export default function OnboardPage() {
       if (!vRes.ok) throw new Error(`validate failed: ${vRes.status}`);
       const v = await vRes.json();
       if (!v.valid) {
-        setSaveError(v.detail || "That key didn't work — double-check it and try again.");
+        setSaveError(v.detail || "That key didn't work, double-check it and try again.");
         return;
       }
 
@@ -243,7 +243,7 @@ export default function OnboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background/60 backdrop-blur-sm flex flex-col">
+    <div className="min-h-screen bg-background/60 flex flex-col">
 
       {/* Navbar */}
       <nav className="flex items-center gap-2 px-6 py-4 border-b">

@@ -26,9 +26,9 @@ const mono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Mnemo — Your AI Memory",
+  title: "Mnemo",
   description:
-    "Your AI memory, owned forever. Search, restore, and inherit your AI conversations across every provider.",
+    "Search, restore, and inherit your AI conversations across every provider.",
 };
 
 export default function RootLayout({

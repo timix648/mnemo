@@ -165,7 +165,7 @@ export default function LandingPage() {
               </div>
               {!signedIn && (
                 <p className="text-xs text-muted-foreground max-w-md">
-                  First sign-in creates your encrypted account automatically — no password,
+                  First sign-in creates your encrypted account automatically. No password,
                   no wallet. Powered by zkLogin, gas-free via Enoki.
                 </p>
               )}

@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -142,7 +141,7 @@ export default function ChatsPage() {
       setChats((prev) => prev.filter((c) => c.id !== id));
       setTotal((prev) => prev - 1);
     } catch {
-      alert("Failed to delete memory. Please check if the backend is running.");
+      alert("Failed to delete memory. Please try again.");
     } finally {
       setDeletingId(null);
     }
@@ -157,7 +156,7 @@ export default function ChatsPage() {
   });
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background/60 flex flex-col">
 
       {/* Navbar */}
       <nav className="flex items-center justify-between px-6 py-4 border-b">

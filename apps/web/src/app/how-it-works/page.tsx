@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Brain, ArrowLeft, ArrowRight } from "lucide-react";
 
 export const metadata = {
-  title: "About Mnemo — how it works, ownership, and inheritance",
+  title: "About Mnemo",
   description:
     "What Mnemo is, the problem it solves, how it captures and encrypts your AI conversations, how you stay in control, and how the inheritance feature works.",
 };
@@ -96,7 +96,7 @@ export default function HowItWorksPage() {
             <p className="text-sm text-muted-foreground leading-relaxed">
               Mnemo sits between you and the AI tools you already use. As you work, it
               archives your conversations into a single private memory that spans every
-              tool and model — encrypted so only you can read it, stored on
+              tool and model, encrypted so only you can read it, stored on
               decentralized infrastructure, searchable in plain language, exportable at
               will, and, if you choose, inheritable.
             </p>
@@ -146,7 +146,7 @@ export default function HowItWorksPage() {
             <p className="text-sm text-muted-foreground leading-relaxed">
               Ownership here is technical, not just a promise. Each memory is encrypted
               with Seal under an access policy bound to your Sui account, so stored
-              content is unreadable to anyone without your authorization — including
+              content is unreadable to anyone without your authorization including
               Mnemo. The encrypted data is written to Walrus, decentralized storage you
               can reach independently, and the rules governing access live in a Move
               smart contract on Sui that you control. Export your entire archive as JSON
@@ -156,7 +156,7 @@ export default function HowItWorksPage() {
           <div className="rounded-2xl border border-primary/25 bg-primary/5 backdrop-blur-md p-6 flex flex-col gap-3">
             <h2 className="text-xl font-bold tracking-tight">Inheritance</h2>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Name an heir — any Sui address — and a silence threshold in days. Normal
+              Name an heir (any Sui address) and a silence threshold in days. Normal
               activity counts as a heartbeat that keeps your account active. If you go
               silent longer than the threshold, the contract lets your heir gain
               decryption access. Until then no one but you can read it, and you can
