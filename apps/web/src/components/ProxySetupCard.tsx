@@ -73,7 +73,7 @@ export function ProxySetupCard({ address }: { address: string | null | undefined
   if (error || !me) {
     return (
       <div className="rounded-xl border bg-card p-5 text-sm text-destructive bg-destructive/10">
-        ⚠️ {error ?? "Couldn't load proxy setup."}
+         {error ?? "Couldn't load proxy setup."}
       </div>
     );
   }

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Brain, ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 
 export const metadata = {
   title: "About Mnemo",
@@ -55,7 +55,8 @@ export default function HowItWorksPage() {
       {/* Header */}
       <nav className="relative z-10 flex items-center justify-between px-6 py-4 border-b border-white/10 bg-background/40 backdrop-blur-md">
         <Link href="/" className="flex items-center gap-2">
-          <Brain className="w-6 h-6 text-primary" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Mnemo" className="w-8 h-8 object-contain" />
           <span className="font-bold text-base sm:text-lg tracking-tight">Mnemo</span>
         </Link>
         <Link href="/">
@@ -84,7 +85,7 @@ export default function HowItWorksPage() {
           <div className="rounded-2xl border border-white/15 bg-background/40 backdrop-blur-md p-6 flex flex-col gap-3">
             <h2 className="text-xl font-bold tracking-tight">The problem</h2>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Your most useful thinking increasingly happens with AI — debugging,
+              Your most useful thinking increasingly happens with AI debugging,
               drafting, deciding. But that history is scattered across vendors, locked
               inside each tool, and tied to whichever model you used that day. Switch
               tools and you lose it. Cancel a subscription and it may be gone. And none

@@ -29,6 +29,8 @@ export const metadata: Metadata = {
   title: "Mnemo",
   description:
     "Search, restore, and inherit your AI conversations across every provider.",
+
+  icons: { icon: [{ url: "/favicon.png", type: "image/png" }] },
 };
 
 export default function RootLayout({
@@ -47,3 +49,4 @@ export default function RootLayout({
     </html>
   );
 }
+

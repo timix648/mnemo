@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Brain, Search, Plus, Copy, Check, X, Loader2 } from "lucide-react";
+import { Search, Plus, Copy, Check, X, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -122,8 +122,8 @@ export default function SearchPage() {
   function toggleContext(result: SearchResult) {
     setContext((prev) =>
       prev.some((c) => keyOf(c) === keyOf(result))
-        ? prev.filter((c) => keyOf(c) !== keyOf(result))   // already in → remove
-        : [...prev, result],                                // not in → add
+        ? prev.filter((c) => keyOf(c) !== keyOf(result))  
+        : [...prev, result],                                
     );
   }
 
@@ -143,9 +143,7 @@ export default function SearchPage() {
     setTimeout(() => setCopied(false), 2000);
   }
 
-  // Open the full-conversation modal. The search result already carries the
-  // decrypted `text` from the relayer, so we can show it immediately. If for
-  // some reason it's missing, fall back to fetching by id.
+
   async function viewFull(result: SearchResult) {
     setOpenResult(result);
     setDetailError(false);
@@ -187,12 +185,13 @@ export default function SearchPage() {
   }, [openResult]);
 
   return (
-    <div className="min-h-screen bg-background/60 flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col">
 
       {/* Navbar */}
       <nav className="flex items-center justify-between px-6 py-4 border-b">
         <Link href="/" className="flex items-center gap-2">
-          <Brain className="w-5 h-5 text-primary" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Mnemo" className="w-8 h-8 object-contain" />
           <span className="font-bold tracking-tight">Mnemo</span>
         </Link>
         <div className="flex gap-2">
@@ -233,7 +232,7 @@ export default function SearchPage() {
           {/* Error banner */}
           {error && (
             <div className="rounded-lg bg-yellow-50 border border-yellow-200 px-4 py-3 text-sm text-yellow-800">
-              ⚠️ {error}
+               {error}
             </div>
           )}
 
@@ -311,7 +310,7 @@ export default function SearchPage() {
             <div className="flex flex-col gap-1">
               <h2 className="font-semibold text-sm">Context panel</h2>
               <p className="text-xs text-muted-foreground">
-                {context.length} snippet{context.length > 1 ? "s" : ""} — ready to paste
+                {context.length} snippet{context.length > 1 ? "s" : ""}  ready to paste
               </p>
             </div>
 

@@ -156,12 +156,13 @@ export default function ChatsPage() {
   });
 
   return (
-    <div className="min-h-screen bg-background/60 flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col">
 
       {/* Navbar */}
       <nav className="flex items-center justify-between px-6 py-4 border-b">
         <Link href="/" className="flex items-center gap-2">
-          <Brain className="w-5 h-5 text-primary" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Mnemo" className="w-8 h-8 object-contain" />
           <span className="font-bold tracking-tight">Mnemo</span>
         </Link>
         <div className="flex gap-2">

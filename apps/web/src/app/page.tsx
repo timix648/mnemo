@@ -7,7 +7,7 @@ import { useEnokiFlow, useZkLogin } from "@mysten/enoki/react";
 import { Button } from "@/components/ui/button";
 import { LogoutButton } from "@/components/LogoutButton";
 import { MnemoSchoolLoader } from "@/components/Clownfish";
-import { Brain, AlertTriangle, ArrowRight } from "lucide-react";
+import { AlertTriangle, ArrowRight } from "lucide-react";
 
 const VALUE_PROPS = [
   { title: "Search everything", body: "Semantic search across years of AI conversations. Find that solution you cracked three months ago in seconds." },
@@ -103,7 +103,8 @@ export default function LandingPage() {
         {/* Glassy navbar — local contrast only */}
         <nav className="flex items-center justify-between px-6 py-4 border-b border-white/20 bg-background/30 backdrop-blur-md">
           <Link href="/" className="flex items-center gap-2">
-            <Brain className="w-6 h-6 text-primary" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Mnemo" className="w-8 h-8 object-contain" />
             <span className="font-bold text-base sm:text-lg tracking-tight">Mnemo</span>
           </Link>
           {signedIn ? (
@@ -136,8 +137,8 @@ export default function LandingPage() {
             </h1>
 
             <p className="relative text-muted-foreground text-base sm:text-lg max-w-xl">
-              Mnemo captures every AI conversation you have — across Cursor, Claude,
-              ChatGPT, and more — encrypts it, and makes it searchable. Forever.
+              Mnemo captures every AI conversation you have across Cursor, Claude,
+              ChatGPT, and more. It encrypts it, and makes it searchable Forever.
             </p>
 
             {error && (

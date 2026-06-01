@@ -1,10 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import {
-  Brain, Key, Heart, GitFork, Download,
-  Trash2, Plus, X, Check, Loader2, ExternalLink, Copy, Wallet, UserRound, Pencil
-} from "lucide-react";
+import { Key, Heart, GitFork, Download, Trash2, Plus, X, Check, Loader2, ExternalLink, Copy, Wallet, UserRound, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
@@ -141,7 +138,7 @@ export default function SettingsPage() {
       if (!res.ok) throw new Error("failed");
       setKeys((prev) => prev.filter((k) => k.provider !== provider));
     } catch {
-      alert("Could not revoke key — try again.");
+      alert("Could not revoke key, try again.");
     } finally {
       setRevoking(null);
     }
@@ -208,7 +205,7 @@ export default function SettingsPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      alert("Export failed — check your backend is running.");
+      alert("Export failed");
     } finally {
       setExporting(false);
     }
@@ -233,7 +230,7 @@ export default function SettingsPage() {
       setEditingProfile(false); // collapse back to the summary
       setTimeout(() => setProfileSaved(false), 3000);
     } catch {
-      alert("Couldn't save your profile — backend unreachable.");
+      alert("Couldn't save your profile, backend unreachable.");
     } finally {
       setProfileSaving(false);
     }
@@ -261,12 +258,13 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background/60 flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col">
 
       {/* Navbar */}
       <nav className="flex items-center justify-between px-6 py-4 border-b">
         <Link href="/" className="flex items-center gap-2">
-          <Brain className="w-5 h-5 text-primary" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Mnemo" className="w-8 h-8 object-contain" />
           <span className="font-bold tracking-tight">Mnemo</span>
         </Link>
         <div className="flex gap-2">
@@ -479,7 +477,7 @@ export default function SettingsPage() {
           <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
             After your silence threshold lapses, your designated recipient will be
             granted access to decrypt your memory archive via Seal. This is enforced
-            by a Move contract on Sui — no one, including Mnemo, can override it.
+            by a Move contract on Sui. No one, including Mnemo, can override it.
           </div>
 
           <div className="flex flex-col gap-3">
@@ -513,7 +511,7 @@ export default function SettingsPage() {
 
           {inheritanceError && (
             <div className="rounded-lg bg-destructive/10 border border-destructive/30 px-4 py-3 text-sm text-destructive">
-              ⚠️ {inheritanceError}
+               {inheritanceError}
             </div>
           )}
 
@@ -547,7 +545,7 @@ export default function SettingsPage() {
           <Separator />
           <p className="text-sm text-muted-foreground">
             Download all your stored memories as a decrypted JSON file. This is
-            your data — take it anywhere.
+            your data.
           </p>
           <Button variant="outline" size="sm" className="w-fit" onClick={handleExport} disabled={exporting}>
             {exporting

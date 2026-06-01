@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Brain, Copy, Check, ChevronRight, Loader2, ShieldCheck } from "lucide-react";
+import { Copy, Check, ChevronRight, Loader2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
@@ -206,7 +206,7 @@ export default function OnboardPage() {
       setApiKey("");
       setTimeout(() => setStep(3), 800);
     } catch {
-      setSaveError("Could not save key — backend unreachable.");
+      setSaveError("Could not save key");
     } finally {
       setSaving(false);
     }
@@ -225,7 +225,7 @@ export default function OnboardPage() {
     if (accountStatus === "error") {
       return (
         <div className="rounded-lg bg-destructive/10 border border-destructive/30 px-4 py-3 text-sm text-destructive flex flex-col gap-2">
-          <span>⚠️ {accountError}</span>
+          <span> {accountError}</span>
           <Button variant="outline" size="sm" className="w-fit" onClick={retryAccount}>
             Retry account setup
           </Button>
@@ -243,11 +243,12 @@ export default function OnboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background/60 flex flex-col">
+    <div className="min-h-screen bg-background/60 backdrop-blur-sm flex flex-col">
 
       {/* Navbar */}
       <nav className="flex items-center gap-2 px-6 py-4 border-b">
-        <Brain className="w-5 h-5 text-primary" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Mnemo" className="w-8 h-8 object-contain" />
         <span className="font-bold tracking-tight">Mnemo</span>
       </nav>
 
@@ -266,7 +267,7 @@ export default function OnboardPage() {
           {/* Backend error banner */}
           {error && (
             <div className="rounded-lg bg-yellow-50 border border-yellow-200 px-4 py-3 text-sm text-yellow-800">
-              ⚠️ {error}
+              {error}
             </div>
           )}
 
@@ -275,7 +276,7 @@ export default function OnboardPage() {
             <div className="flex flex-col gap-4">
               <p className="text-muted-foreground text-sm">
                 Sign in with Google to create your encrypted Mnemo account.
-                Your identity is managed via zkLogin — Mnemo never sees your password.
+                Your identity is managed via zkLogin, Mnemo never sees your password.
               </p>
               <Button className="w-full" size="lg" onClick={handleGoogleLogin}>
                 Sign in with Google
@@ -335,7 +336,7 @@ export default function OnboardPage() {
 
               {profileError && (
                 <div className="rounded-lg bg-destructive/10 border border-destructive/30 px-4 py-3 text-sm text-destructive">
-                  ⚠️ {profileError}
+                   {profileError}
                 </div>
               )}
 
@@ -383,7 +384,7 @@ export default function OnboardPage() {
 
               {saveError && (
                 <div className="rounded-lg bg-destructive/10 border border-destructive/30 px-4 py-3 text-sm text-destructive">
-                  ⚠️ {saveError}
+                   {saveError}
                 </div>
               )}
 
