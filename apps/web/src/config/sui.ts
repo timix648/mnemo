@@ -2,7 +2,7 @@ export const MNEMO_TESTNET = {
   PACKAGE_ID: "0x140618622e96fe604e8fd1e8a752e1fe44726cdb0622a18020a61955ce918a60",
   REGISTRY_ID: "0xa13e1c5b27d1b5e41c780c3ed2a572219b20bf1c18c5a55f4289ab04e2f515f3",
   CHAIN_ID: "4c78adac",
-  RPC_URL: "https://fullnode.testnet.sui.io:443",
+  RPC_URL: "https://sui-testnet.gateway.tatum.io",
   EXPLORER: "https://testnet.suivision.xyz",
   WALRUS_AGGREGATOR: "https://aggregator.walrus-testnet.walrus.space",
   WALRUS_PUBLISHER: "https://publisher.walrus-testnet.walrus.space",
