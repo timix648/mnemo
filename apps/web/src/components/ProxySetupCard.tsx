@@ -124,7 +124,7 @@ export function ProxySetupCard({ address }: { address: string | null | undefined
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Keep this private — it lets your AI tools post on your behalf.
+          Keep this private,it lets your AI tools post on your behalf.
         </p>
       </div>
 

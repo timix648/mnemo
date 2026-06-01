@@ -15,7 +15,7 @@ const STEPS = [
   },
   {
     title: "Point your AI tool at your proxy",
-    body: "Mnemo gives you a personal, OpenAI-compatible endpoint and token. Set them as the API base URL and key in any tool that supports a custom endpoint — Cursor, Cline, BoltAI, and others. From then on, every conversation that flows through that tool is captured into your memory.",
+    body: "Mnemo gives you a personal, OpenAI-compatible endpoint and token. Set them as the API base URL and key in any tool that supports a custom endpoint (Cursor, Cline, BoltAI, and others). From then on, every conversation that flows through that tool is captured into your memory.",
   },
   {
     title: "Search across everything",
@@ -23,7 +23,7 @@ const STEPS = [
   },
   {
     title: "Set an heir (optional)",
-    body: "Choose a Sui address and a period of silence. If you go inactive for that long, an on-chain dead-man's switch grants your chosen heir the ability to decrypt your archive. The rule is enforced by a Move contract — Mnemo cannot override it.",
+    body: "Choose a Sui address and a period of silence. If you go inactive for that long, an on-chain dead-man's switch grants your chosen heir the ability to decrypt your archive. The rule is enforced by a Move contract that Mnemo cannot override.",
   },
 ];
 

@@ -102,10 +102,10 @@ export default function SettingsPage() {
         if (state.dormancyDays > 0) setThreshold(String(state.dormancyDays));
         setHeartbeatStatus(formatHeartbeat(state));
       } else {
-        setHeartbeatStatus("No on-chain account yet · finish onboarding");
+        setHeartbeatStatus("No onchain account yet · finish onboarding");
       }
     } catch {
-      setHeartbeatStatus("Couldn't read on-chain status");
+      setHeartbeatStatus("Couldn't read onchain status");
     }
   };
 
@@ -146,7 +146,7 @@ export default function SettingsPage() {
 
   async function handleHeartbeat() {
     setPinged(true);
-    setHeartbeatStatus("Pinging on-chain...");
+    setHeartbeatStatus("Pinging onchain...");
     try {
       if (!address) throw new InheritanceError("Sign in to ping your heartbeat.");
       await sendHeartbeat(flow, suiClient, address);
@@ -154,7 +154,7 @@ export default function SettingsPage() {
     } catch (e) {
       setHeartbeatStatus(
         e instanceof InheritanceError ? e.message
-          : "Couldn't confirm on-chain ping (still counts locally).",
+          : "Couldn't confirm onchain ping (still counts locally).",
       );
     } finally {
       setTimeout(() => setPinged(false), 2000);
@@ -177,11 +177,11 @@ export default function SettingsPage() {
       setInheritanceSaved(true);
       setTimeout(() => setInheritanceSaved(false), 6000);
       await refreshState();
-      console.log("Inheritance set on-chain:", digest);
+      console.log("Inheritance set onchain:", digest);
     } catch (e) {
       setInheritanceError(
         e instanceof InheritanceError ? e.message
-          : "On-chain save failed. Check your connection and try again.",
+          : "Onchain save failed. Check your connection and try again.",
       );
     } finally {
       setInheritanceSaving(false);
@@ -258,7 +258,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background/60 flex flex-col">
 
       {/* Navbar */}
       <nav className="flex items-center justify-between px-6 py-4 border-b">
@@ -373,8 +373,8 @@ export default function SettingsPage() {
           </div>
           <Separator />
           <p className="text-sm text-muted-foreground">
-            Your on-chain identity. Share it with anyone who wants to name you as
-            their heir — or whose memory you&apos;ll inherit.
+            Your onchain identity. Share it with anyone who wants to name you as
+            their heir or whose memory you&apos;ll inherit.
           </p>
           <div className="flex gap-2">
             <code className="flex-1 px-3 py-2 rounded-md bg-muted text-xs font-mono break-all">
@@ -426,8 +426,8 @@ export default function SettingsPage() {
           )}
 
           <p className="text-xs text-muted-foreground">
-            All keys are reached through the single proxy endpoint shown above —
-            the provider is chosen by the model name in each request.
+            All keys are reached through the single proxy endpoint shown above.
+            The provider is chosen by the model name in each request.
           </p>
 
           <Link href="/onboard?step=key">
@@ -503,8 +503,8 @@ export default function SettingsPage() {
               <Input placeholder="A message your recipient will see when they gain access..."
                 value={note} onChange={(e) => setNote(e.target.value)} />
               <p className="text-xs text-muted-foreground">
-                The heir address and silence window are enforced on-chain. The note
-                is delivered with the decryption key (stored off-chain).
+                The heir address and silence window are enforced onchain. The note
+                is delivered with the decryption key (stored offchain).
               </p>
             </div>
           </div>
@@ -517,7 +517,7 @@ export default function SettingsPage() {
 
           {inheritanceSaved && (
             <div className="rounded-lg bg-primary/10 border border-primary/30 px-4 py-3 text-sm text-primary flex flex-col gap-1">
-              <span>✓ Inheritance enforced on-chain.</span>
+              <span>✓ Inheritance enforced onchain.</span>
               {inheritanceTx && (
                 <a href={inheritanceTx} target="_blank" rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-xs underline underline-offset-2">
@@ -529,7 +529,7 @@ export default function SettingsPage() {
 
           <Button className="w-fit" onClick={handleSaveInheritance} disabled={inheritanceSaving}>
             {inheritanceSaving
-              ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving on-chain...</>
+              ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving onchain...</>
               : inheritanceSaved
                 ? <><Check className="w-4 h-4 mr-2" />Saved!</>
                 : "Save inheritance config"}

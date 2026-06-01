@@ -82,7 +82,7 @@ export default function OnboardPage() {
       .finally(() => setLoading(false));
   }, [address]);
 
-  // Create the on-chain account if it doesn't exist yet. Idempotent.
+  // Create the onchain account if it doesn't exist yet. Idempotent.
   useEffect(() => {
     if (!address) return;
     let cancelled = false;
@@ -106,7 +106,7 @@ export default function OnboardPage() {
         setAccountError(
           e instanceof InheritanceError
             ? e.message
-            : "Couldn't set up your on-chain account. You can retry below.",
+            : "Couldn't set up your onchain account. You can retry below.",
         );
       }
     })();
@@ -126,7 +126,7 @@ export default function OnboardPage() {
       setAccountError(
         e instanceof InheritanceError
           ? e.message
-          : "Couldn't set up your on-chain account. Try again.",
+          : "Couldn't set up your onchain account. Try again.",
       );
     }
   }
@@ -192,7 +192,7 @@ export default function OnboardPage() {
       if (!vRes.ok) throw new Error(`validate failed: ${vRes.status}`);
       const v = await vRes.json();
       if (!v.valid) {
-        setSaveError(v.detail || "That key didn't work, double-check it and try again.");
+        setSaveError(v.detail || "That key didn't work, double check it and try again.");
         return;
       }
 
@@ -218,7 +218,7 @@ export default function OnboardPage() {
       return (
         <div className="rounded-lg bg-primary/10 border border-primary/30 px-4 py-3 text-sm text-primary flex items-center gap-2">
           <ShieldCheck className="w-4 h-4" />
-          Your on-chain Mnemo account is ready.
+          Your onchain Mnemo account is ready.
         </div>
       );
     }
@@ -236,14 +236,14 @@ export default function OnboardPage() {
       <div className="rounded-lg bg-muted/40 border px-4 py-3 text-sm text-muted-foreground flex items-center gap-2">
         <Loader2 className="w-4 h-4 animate-spin" />
         {accountStatus === "creating"
-          ? "Creating your on-chain account (gas sponsored by Mnemo)..."
-          : "Checking your on-chain account..."}
+          ? "Creating your onchain account (gas sponsored by Mnemo)..."
+          : "Checking your onchain account..."}
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background/60 backdrop-blur-sm flex flex-col">
+    <div className="min-h-screen bg-background/60 flex flex-col">
 
       {/* Navbar */}
       <nav className="flex items-center gap-2 px-6 py-4 border-b">
@@ -295,7 +295,7 @@ export default function OnboardPage() {
                     {displayName.trim() ? `Hi, ${displayName.trim()}!` : "Make it yours"}
                   </h2>
                   <p className="text-sm text-muted-foreground max-w-xs">
-                    Pick a name and a sea-creature avatar. They appear on your
+                    Pick a name and a sea creature avatar. They appear on your
                     messages when you browse your memory.
                   </p>
                 </div>
@@ -354,7 +354,7 @@ export default function OnboardPage() {
               <p className="text-muted-foreground text-sm">
                 Paste your API key. We verify it with your provider, then store
                 it on your Mnemo backend and use it only to make calls on your
-                behalf. (Client-side Seal encryption is coming before mainnet.)
+                behalf. (Seal encryption in your browser is coming before mainnet.)
               </p>
 
               <AccountStatusBadge />
@@ -507,7 +507,7 @@ export default function OnboardPage() {
                     steps: [
                       "Find the custom API base URL setting in your tool",
                       "Paste your Proxy URL",
-                      "Any OpenAI-compatible client will work with your API Token",
+                      "Any OpenAI compatible client will work with your API Token",
                     ],
                   },
                 ].map(({ key, steps }) => (
