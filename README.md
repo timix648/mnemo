@@ -45,7 +45,7 @@ Neither Mnemo nor anyone else can grant access early or deny it when conditions 
 
 - Package: `0x140618622e96fe604e8fd1e8a752e1fe44726cdb0622a18020a61955ce918a60`
 - Module: `account` · AccountRegistry: `0xa13e1c5b27d1b5e41c780c3ed2a572219b20bf1c18c5a55f4289ab04e2f515f3`
-- Explorer: https://testnet.suivision.xyz/package/0x140618622e96fe604e8fd1e8a752e1fe44726cdb0622a18020a61955ce918a60
+- Explorer: [view the package on SuiVision (testnet)](https://testnet.suivision.xyz/package/0x140618622e96fe604e8fd1e8a752e1fe44726cdb0622a18020a61955ce918a60)
 
 A live capture produces logs like `seal encrypt ok: 374 bytes -> 723 encrypted bytes` followed by a real Walrus blob ID and onchain object ID — real Seal, real Walrus, real Sui, every time.
 
@@ -65,7 +65,7 @@ A live capture produces logs like `seal encrypt ok: 374 bytes -> 723 encrypted b
 
 See the diagram above. In short: your AI tool talks to the Mnemo proxy (which forwards to OpenAI/Anthropic and captures asynchronously). A capture worker hands off to a Node sidecar, which bridges to the MemWal relayer — the relayer owns embedding, Seal encryption, Walrus upload, and Sui indexing. The Next.js web app (hosted on Walrus Sites) talks to a separate management API for search, keys, and memories.
 
-Encryption and onchain operations are owned by the MemWal relayer (a self hosted fork of MystenLabs/MemWal); the sidecar bridges Python services to the Node only Sui SDKs. Provider API keys are encrypted at rest (envelope encryption); memories are encrypted with Seal.
+Encryption and onchain operations are owned by the MemWal relayer (a self hosted fork of [MystenLabs/MemWal](https://github.com/MystenLabs/MemWal)); the sidecar bridges Python services to the Node only Sui SDKs. Provider API keys are encrypted at rest (envelope encryption); memories are encrypted with Seal.
 
 | Service | Tech | Purpose |
 |---|---|---|
@@ -91,7 +91,7 @@ Mnemo draws a deliberate line between two kinds of secrets, encrypted two differ
 
 ## Running locally
 
-**Quick version for reviewers:** you need Postgres + pgvector and Redis (via `docker compose`), the MemWal relayer (testnet config), and the five Mnemo services. Full Windows first setup is in `SETUP.md`; per service detail is in `apps/*/README.md`.
+**Quick version for reviewers:** you need Postgres + pgvector and Redis (via `docker compose`), the MemWal relayer (testnet config), and the five Mnemo services. Full Windows first setup is in [`SETUP.md`](SETUP.md); per service detail is in each service's README ([proxy](apps/proxy/README.md), [api](apps/api/README.md), [worker](apps/worker/README.md), [sidecar](apps/sidecar/README.md), [web](apps/web/README.md)).
 
 ```bash
 docker compose up -d                      # Postgres + Redis
