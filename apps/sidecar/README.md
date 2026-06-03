@@ -1,8 +1,8 @@
 # apps/sidecar
 
-Node + TypeScript bridge service that exposes the MemWal and Seal SDKs over
-HTTP. The Python services (proxy, worker, api) call it for any operation that
-needs the Mysten Labs SDKs (which are Node-only).
+Node + TypeScript bridge service. The Python services (proxy, worker, api) are Python, but the Sui, Seal, and MemWal SDKs are Node only — the sidecar exposes the operations they need over HTTP and forwards them to the self hosted MemWal relayer, which performs the actual encryption and onchain work.
+
+Runs on port `3001`.
 
 ## Run
 
@@ -10,7 +10,7 @@ needs the Mysten Labs SDKs (which are Node-only).
 pnpm install
 cp .env.example .env
 pnpm dev
-# http://localhost:3001/health
+# GET http://localhost:3001/health
 ```
 
 ## Endpoints
@@ -18,22 +18,20 @@ pnpm dev
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/health` | Liveness |
-| POST | `/memwal/remember` | Write encrypted blob via MemWal |
-| POST | `/memwal/recall` | Read encrypted blob via MemWal |
-| POST | `/seal/encrypt` | Seal-encrypt plaintext under a policy |
-| POST | `/seal/decrypt` | Seal-decrypt ciphertext under a policy |
+| POST | `/memwal/remember` | Embed, Seal encrypt, store on Walrus, index on Sui (via relayer) |
+| POST | `/memwal/recall` | Semantic recall: resolve blobs and decrypt |
+| POST | `/memwal/fetch` | Fetch and decrypt a specific memory |
 
-## Week 1 status
+## Configuration (.env)
 
-Both MemWal and Seal are **mocked**. The interfaces are stable; the
-implementations will be replaced in Week 2 once we've verified the SDK
-APIs against the actual repos. The mocks let the rest of the stack run
-end-to-end against an in-memory blob store. **Do not demo against the mocks** —
-they are not real encryption.
+| Variable | Purpose |
+|---|---|
+| `PORT` | Bind port (default `3001`) |
+| `SUI_NETWORK` / `SUI_RPC_URL` | Sui testnet |
+| `RELAYER_URL` | MemWal relayer (`http://localhost:8000`) |
+| `SIDECAR_DELEGATE_SUI_KEY` | Delegate wallet that signs Walrus writes |
+| `MNEMO_PACKAGE_ID` / `MNEMO_ACCOUNT_ID` | Onchain package + account |
 
-## Week 2 TODOs
+## Architecture
 
-- [ ] Install `@mysten-incubation/memwal`, replace `src/memwal/client.ts`
-- [ ] Install `@mysten/seal`, replace `src/seal/client.ts`
-- [ ] Wire the delegate Sui keypair from env
-- [ ] Add integration tests against testnet
+The sidecar does not mock encryption. It bridges to the MemWal relayer (a self hosted fork of MystenLabs/MemWal), which runs real Seal threshold encryption (2 of 2 testnet key servers), real Walrus testnet storage, and real Sui indexing. Decryption is gated by the forked `account::seal_approve` policy — including the heir / dead man's switch condition. See the root `README.md` and `packages/move/SDK_NOTES.md`.

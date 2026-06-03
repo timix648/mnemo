@@ -1,19 +1,19 @@
 # apps/proxy
 
-Python FastAPI proxy. AI tools point their OpenAI/Anthropic base URL at this
-service. We forward to the real provider and asynchronously capture every
-exchange for storage.
+Python FastAPI proxy. AI tools (Cursor, Chatbox, Claude, ChatGPT, or anything with a custom OpenAI/Anthropic endpoint) set their base URL to this service. The proxy forwards the request to the real provider and asynchronously captures every exchange for encrypted storage.
+
+Runs on port `8080`.
 
 ## Endpoints
 
 | Method | Path | Forwards to |
 |---|---|---|
 | GET | `/health` | — |
-| POST | `/u/{user_id}/v1/chat/completions` | OpenAI |
-| POST | `/u/{user_id}/v1/embeddings` | OpenAI (no capture) |
-| POST | `/u/{user_id}/anthropic/v1/messages` | Anthropic |
+| POST | `/u/{user_id}/v1/chat/completions` | OpenAI (captured) |
+| POST | `/u/{user_id}/v1/embeddings` | OpenAI (not captured) |
+| POST | `/u/{user_id}/anthropic/v1/messages` | Anthropic (captured) |
 
-Auth: `Authorization: Bearer <proxy_token>` (the per-user token from `users.proxy_token`).
+Auth: `Authorization: Bearer <proxy_token>` — the per user token from `users.proxy_token`.
 
 ## Run
 
@@ -21,34 +21,26 @@ Auth: `Authorization: Bearer <proxy_token>` (the per-user token from `users.prox
 python -m venv .venv
 source .venv/bin/activate   # PowerShell: .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-cp .env.example .env
-# edit .env — set DEV_OPENAI_KEY for Week 1 testing
+cp .env.example .env        # see Configuration below
 uvicorn mnemo_proxy.main:app --port 8080 --reload
 ```
 
-## Test it
+## Configuration (.env)
 
-```bash
-# Seed a test user first (see SETUP.md step 9)
-curl http://localhost:8080/u/00000000-0000-0000-0000-000000000001/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer test-token-week1" \
-  -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"Hello in 5 words."}]}'
-```
+| Variable | Purpose |
+|---|---|
+| `PROXY_HOST` / `PROXY_PORT` | Bind address (default `0.0.0.0:8080`) |
+| `DATABASE_URL` | Postgres (pgvector), port `5433` |
+| `REDIS_URL` | Redis capture queue, port `6380` |
+| `SIDECAR_URL` | Node sidecar (`http://localhost:3001`) |
+| `OPENAI_BASE_URL` / `ANTHROPIC_BASE_URL` | Upstream providers |
+| `CAPTURE_ENABLED` | Toggle async capture |
+| `MNEMO_PACKAGE_ID` / `FERNET_KEY` | Onchain package + key envelope |
 
-## Streaming
+## Capture flow
 
-Both OpenAI and Anthropic streaming are supported. The proxy forwards each
-SSE line to the client immediately and reconstructs the full message
-server-side for the capture job.
+On a captured request, the proxy streams the provider response to the client immediately, reconstructs the full exchange server side, and enqueues a capture job on Redis. The worker then embeds it, the relayer Seal encrypts it and stores it on Walrus, and the row is indexed in Postgres. Streaming (SSE) is supported for both OpenAI and Anthropic.
 
-## What's mocked in Week 1
+## Notes
 
-`upstream_keys.py` falls back to `DEV_OPENAI_KEY` / `DEV_ANTHROPIC_KEY` env
-vars. Week 2 replaces this with a sidecar call to Seal-decrypt the stored key.
-
-## What is NOT here yet
-
-- Rate limiting (Week 3)
-- Per-tool routing (Week 3)
-- Mainnet observability (Week 4)
+Provider keys: in the closed testnet beta the proxy can use an env supplied provider key on the request path (provider keys are used unattended, where Seal's user authorized model does not fit). Stored provider keys are envelope encrypted at rest; user memories are Seal encrypted. See the root `README.md` security notes.
