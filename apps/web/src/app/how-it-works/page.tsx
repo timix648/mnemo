@@ -15,7 +15,7 @@ const STEPS = [
   },
   {
     title: "Point your AI tool at your proxy",
-    body: "Mnemo gives you a personal, OpenAI-compatible endpoint and token. Set them as the API base URL and key in any tool that supports a custom endpoint (Cursor, Cline, BoltAI, and others). From then on, every conversation that flows through that tool is captured into your memory.",
+    body: "Mnemo gives you a personal, OpenAI/Anthropic compatible endpoint and token. Set them as the API base URL and key in any tool that supports a custom endpoint (Cursor, Cline, BoltAI, and others). From then on, every conversation that flows through that tool is captured into your memory.",
   },
   {
     title: "Search across everything",
