@@ -31,13 +31,31 @@ You name an heir (any Sui address) and a silence threshold. Normal activity is a
 
 Neither Mnemo nor anyone else can grant access early or deny it when conditions are met. The rule is the contract. This is programmable data inheritance — your AI memory outlives you, cryptographically.
 
+### Forked infrastructure: how we extended MemWal
+
+Mnemo's relayer is a self hosted fork of [MystenLabs/MemWal](https://github.com/MystenLabs/MemWal), maintained at [timix648/MemWal](https://github.com/timix648/MemWal). Rather than wrap MemWal or rebuild it, we made a surgical fork of its `account` Move module so the inheritance rule is enforced inside the same `seal_approve` policy the MemWal sidecar already calls. The module name stays `account`, so the sidecar targets our fork unchanged — we simply point its `MEMWAL_PACKAGE_ID` at our deployed package.
+
+What we added to MemWal's `account` module:
+
+- **Three fields** on the `MemWalAccount` struct: `heir: Option<address>`, `dormancy_seconds: u64` (silence threshold; `0` disables inheritance), and `last_active_ms: u64` (refreshed on owner activity).
+- **Four entry functions:** `set_heir`, `clear_heir`, `set_dormancy`, and `touch_activity` (the heartbeat).
+- **One additional pass condition** in `seal_approve`, granting decryption to the heir only when the dead man's switch has elapsed:
+
+```
+caller == account.heir
+  && now_ms >= account.last_active_ms + (account.dormancy_seconds * 1000)
+  && account.dormancy_seconds > 0
+```
+
+Because this lives in `seal_approve`, the inheritance rule is enforced by Seal's key servers against a real time onchain clock — not by Mnemo's servers. The contract is the authority.
+
 ### Real use of Sui's primitives (not mocked)
 
 | Primitive | How Mnemo uses it |
 |---|---|
 | **Seal** | Threshold encryption (2 of 2 key servers) of every memory; decryption gated by an onchain Move policy. Encryption is performed by the MemWal relayer — see proof below. |
 | **Walrus** | All encrypted memory blobs stored on Walrus; retrieved and decrypted on demand. |
-| **Sui Move** | A forked and extended account module adds the heir / dead man's switch logic into the `seal_approve` access policy. |
+| **Sui Move** | A forked and extended MemWal `account` module ([timix648/MemWal](https://github.com/timix648/MemWal)) adds the heir / dead man's switch logic into the `seal_approve` access policy — see "Forked infrastructure" above. |
 | **zkLogin (Enoki)** | Passwordless Google sign in derives each user's Sui address. No seed phrase, no wallet install. |
 | **Sponsored transactions (Enoki)** | Gas is sponsored — onboarding and inheritance cost the user nothing. |
 
