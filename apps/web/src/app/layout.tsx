@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Plus_Jakarta_Sans, Fraunces, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Providers from "@/components/providers";
+import { Analytics } from "@vercel/analytics/react";
 
 // Body: Plus Jakarta Sans — friendly, rounded humanist sans (not Inter/Geist).
 const sans = Plus_Jakarta_Sans({
@@ -45,8 +46,8 @@ export default function RootLayout({
     >
       <body className="font-sans antialiased">
         <Providers>{children}</Providers>
+        <Analytics />
       </body>
     </html>
   );
 }
-
