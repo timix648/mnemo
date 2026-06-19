@@ -4,7 +4,7 @@ Mnemo is an encrypted, portable, inheritable memory layer for your AI conversati
 
 Point any AI tool — Cursor, Chatbox, Claude, ChatGPT, or any app with a custom OpenAI/Anthropic endpoint — at your personal Mnemo proxy. Every conversation is automatically captured, encrypted with Seal, stored on Walrus, and indexed on Sui. Search years of AI conversations across every tool from one place — and because the access policy lives in a Move contract you control, you can pass your entire AI memory on to an heir through an onchain dead man's switch.
 
-**Sui Overflow 2026 — Agentic Web Track**
+**Sui Overflow 2026 — Walrus Track**
 Website: [https://mnemo-zeta.vercel.app/] · Video: [https://youtu.be/72J1FkYaExc?t=189&si=C7w8DZz40heolJF3]
 
 ![Mnemo architecture](docs/mnemo_architecture.png)
